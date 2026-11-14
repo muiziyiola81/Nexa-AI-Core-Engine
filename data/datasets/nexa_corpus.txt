@@ -1,0 +1,16 @@
+The NEXA AI Core Engine is an independent artificial intelligence infrastructure project.
+NEXA does not depend on cloud inference APIs, third-party hosted models, or external services.
+The NEXA native runtime is written in modern C++20 for high performance on CPU hardware.
+The inference engine computes tensor operations, matrix multiplication, RMSNorm, and attention.
+Every transformer layer applies causal multi-head self-attention and SwiGLU feed-forward networks.
+Autograd computes exact analytical gradients for backpropagation across all model parameters.
+The AdamW optimizer updates model weights with decoupled weight decay and momentum tracking.
+NEXA-1 Nano is trained from randomly initialized weights on local hardware.
+Training sequences are created by tokenizing plain-text datasets with a byte-level tokenizer.
+The language model predicts the next token in the sequence by computing cross-entropy loss.
+As training proceeds step by step, the cross-entropy loss decreases and weights are updated.
+Checkpoints are saved in the binary .nexa format with tensor headers and optimizer state.
+Inference loads the trained .nexa checkpoint and generates tokens autoregressively.
+Greedy decoding, temperature sampling, top-k filtering, and repetition penalty control generation.
+NEXA provides full ownership of the AI model, inference runtime, and training foundation.
+The NEXA AI architecture is portable across x86_64 and ARM64 architectures.

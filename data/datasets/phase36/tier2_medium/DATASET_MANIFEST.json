@@ -1,0 +1,8 @@
+{
+  "name": "nexa-phase36-tier2-medium",
+  "version": "3.6-tier2-1.0.0",
+  "source": "Original NEXA Project Phase 3.6 Authored Corpus (Tier 2 Medium)",
+  "license": "MIT",
+  "externalDownloads": false,
+  "unseenTestFile": "data/datasets/phase36/unseen_test_expanded.txt"
+}

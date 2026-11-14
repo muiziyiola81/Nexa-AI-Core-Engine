@@ -1,0 +1,4 @@
+{"messages":[{"role":"user","content":"What is binary search?"},{"role":"assistant","content":"Binary search repeatedly divides a sorted list in half to locate a target value."}]}
+{"prompt":"What is RAM?","response":"RAM is volatile fast memory used to hold active programs and working data."}
+{"messages":[{"role":"user","content":"Why does water boil at lower temperatures on mountains?"},{"role":"assistant","content":"Lower atmospheric pressure at high altitude reduces the vapor pressure needed for boiling."}]}
+{"messages":[{"role":"user","content":"What is a prime number?"},{"role":"assistant","content":"A prime number is an integer greater than one with only two positive divisors."}]}

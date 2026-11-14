@@ -1,0 +1,25 @@
+Q: What is AI?
+A: Artificial intelligence is the computational study and development of machines capable of performing tasks that typically require human reasoning, pattern recognition, and learning.
+
+Question: What is AI?
+Answer: AI stands for artificial intelligence, which refers to computer software systems that process data, recognize patterns, and make automated decisions.
+
+Q: What is the purpose of NEXA AI?
+A: The purpose of NEXA AI is to build an independent, self-contained AI infrastructure with its own native C++ inference engine, training system, tokenizer, and model architecture without relying on third-party cloud APIs.
+
+Question: What is the purpose of NEXA AI?
+Answer: NEXA AI is designed to develop sovereign, locally executable artificial intelligence software that gives users full ownership over model inference and training.
+
+Q: What is a neural network?
+A: A neural network is a computational architecture inspired by biological neurons, composed of interconnected layers of weights, linear transformations, and non-linear activation functions.
+
+Question: What is a neural network?
+Answer: A neural network is a mathematical system that learns representations from data by updating internal parameters through forward evaluation, backpropagation, and gradient descent.
+
+Q: What is an algorithm?
+A: An algorithm is a well-defined sequence of computational instructions and finite steps designed to solve a problem or perform a specific task.
+
+Question: What is an algorithm?
+Answer: An algorithm is a systematic mathematical procedure that takes input data, executes defined operations, and produces a determined output.
+
+Artificial intelligence systems utilize algorithms and neural networks to analyze structured inputs. NEXA AI creates native CPU-driven neural networks that execute matrix multiplications and attention mechanisms directly on hardware without external dependencies.

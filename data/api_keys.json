@@ -1,0 +1,17 @@
+[
+  {
+    "id": "key_default_master",
+    "name": "Default Master Key (Local Dev)",
+    "keyPrefix": "nexa_live_dev...",
+    "keyHash": "a57da9af30f1a7daee25bd35e98c489d4400fb2495f20fc9c0029c8701e185b8",
+    "scopes": [
+      "chat:completions",
+      "models:read",
+      "models:manage",
+      "engine:admin"
+    ],
+    "createdAt": 1794341854485,
+    "totalRequests": 7,
+    "lastUsedAt": 1794342344794
+  }
+]

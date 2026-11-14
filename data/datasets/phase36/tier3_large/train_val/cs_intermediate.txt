@@ -1,0 +1,119 @@
+User: How does a depth-first search traverse a tree or graph?
+Assistant: Depth-first search follows one branch as deeply as possible before backtracking to explore unvisited sibling paths.
+
+User: What is a priority queue or binary heap used for?
+Assistant: A binary heap keeps the smallest or largest element quickly accessible at the root so tasks can always be popped by priority.
+
+User: How does merge sort achieve O(n log n) worst-case performance?
+Assistant: Merge sort recursively splits the list into halves and merges sorted sublists in linear time at each logarithmic level.
+
+User: What is dynamic programming?
+Assistant: Dynamic programming solves complex optimization problems faster by breaking them into overlapping subproblems and caching each subproblem result once.
+
+User: Why do hash collisions occur in hash tables?
+Assistant: Because infinitely many possible keys map into a finite array of slots, two distinct keys occasionally hash to the same index.
+
+User: How does separate chaining handle hash collisions?
+Assistant: Separate chaining stores a small list or bucket at each slot so multiple keys sharing the same hash remain easy to locate.
+
+User: What is a mutex in multithreaded programming?
+Assistant: A mutex is a mutual-exclusion lock ensuring only one thread accesses a shared resource or critical section at a time.
+
+User: Why can race conditions produce intermittent bugs?
+Assistant: Race conditions depend on unpredictable thread scheduling timings, so unsynchronized shared writes corrupt data only under specific interleavings.
+
+User: What does virtual memory provide to applications?
+Assistant: Virtual memory gives each process an isolated, contiguous address space mapped safely onto physical RAM pages and swap space by hardware.
+
+User: How does a page fault occur in an operating system?
+Assistant: A page fault triggers when a program accesses a virtual memory page not currently resident in physical RAM, prompting the kernel to load or map it.
+
+User: What is an abstract syntax tree in a compiler?
+Assistant: An abstract syntax tree represents parsed source code hierarchically according to language grammar without superficial punctuation tokens.
+
+User: Why do optimizing compilers perform dead-code elimination?
+Assistant: Removing unreachable branches or unused computations shrinks executable binary size and eliminates wasted CPU cycles at runtime.
+
+User: What is the difference between HTTP GET and HTTP POST?
+Assistant: GET requests retrieve an existing resource without changing server state, whereas POST sends a payload to create records or trigger actions.
+
+User: What does an HTTP 404 status code indicate?
+Assistant: HTTP 404 means the server was reachable, but the specific requested URL path or resource does not exist on that server.
+
+User: What is a RESTful API endpoint?
+Assistant: A RESTful endpoint exposes resources at predictable URLs manipulated through standard HTTP methods like GET, POST, PUT, and DELETE.
+
+User: How does JSON represent structured data?
+Assistant: JSON serializes hierarchical data cleanly using key-value objects, ordered arrays, strings, numbers, booleans, and null values.
+
+User: Why do database transactions enforce ACID properties?
+Assistant: Atomicity, consistency, isolation, and durability ensure multi-step database updates succeed completely or roll back cleanly without partial corruption.
+
+User: What is a foreign key in SQL?
+Assistant: A foreign key constrains values in one table column to match valid primary keys in another table, preserving referential integrity.
+
+User: How does symmetric encryption differ from asymmetric encryption?
+Assistant: Symmetric encryption uses one shared secret key for locking and unlocking data, whereas asymmetric encryption pairs a public key with a private key.
+
+User: Why are digital signatures used when distributing software?
+Assistant: Digital signatures let users verify cryptographically that a downloaded binary truly came from its author and was not altered in transit.
+
+User: What is a firewall in network security?
+Assistant: A firewall inspects incoming and outgoing network packets against security rules to block unauthorized connections and traffic.
+
+User: How does a gradient descent optimizer update model parameters?
+Assistant: Gradient descent adjusts each weight slightly in the opposite direction of its loss gradient to move downhill toward lower error.
+
+User: Why is a learning rate warmup often applied at the start of training?
+Assistant: Starting with a small learning rate prevents large early gradient spikes from destabilizing randomly initialized weights and optimizer moments.
+
+User: What does gradient clipping protect against?
+Assistant: Gradient clipping rescales oversized gradient vectors when their global norm exceeds a threshold, preventing exploding updates and NaN weights.
+
+User: Why are validation loss and training loss tracked separately?
+Assistant: Comparing validation loss against training loss reveals whether a model is learning general patterns or simply memorizing training examples.
+
+User: What is cross-entropy loss in next-token prediction?
+Assistant: Cross-entropy loss measures how surprised the model is by the true next token, penalizing low predicted probability on the target token logarithmically.
+
+User: Why is softmax applied to output logits?
+Assistant: Softmax exponentiates and normalizes raw real-valued logits into a valid probability distribution summing to one across the vocabulary.
+
+User: What is causal masking in a decoder-only transformer?
+Assistant: Causal masking blocks attention weights to future token positions so position t can only gather context from tokens zero through t.
+
+User: Why do multi-head attention layers split hidden dimensions across heads?
+Assistant: Multiple attention heads allow the transformer to focus simultaneously on different relationships, such as local syntax and distant subject nouns.
+
+User: What role do residual skip connections play inside deep transformers?
+Assistant: Residual connections add each sublayer's input directly to its output so gradients flow straight back through deep stacks without vanishing.
+
+User: Why does RMSNorm stabilize neural activations?
+Assistant: RMSNorm scales activation vectors by their root-mean-square magnitude so layer outputs stay bounded smoothly during forward and backward passes.
+
+User: What is a learning rate cosine schedule?
+Assistant: Cosine decay gradually reduces the learning rate along a smooth cosine curve down to a minimum floor as training approaches its final step.
+
+User: How does gradient accumulation simulate larger batch sizes on small CPUs?
+Assistant: Accumulating gradients across multiple forward-backward micro-batches before stepping the optimizer averages updates smoothly without extra activation RAM.
+
+User: What is a checkpoint file during model training?
+Assistant: A checkpoint saves model weights, configuration metadata, step count, and optimizer state to disk so training or inference can resume reliably.
+
+User: Why is UTF-8 validation important before building a text corpus?
+Assistant: Rejecting malformed byte sequences early prevents tokenizer corruption, broken text decoding, and hidden garbled tokens inside training batches.
+
+User: What does deduplication accomplish in dataset preparation?
+Assistant: Removing identical and near-identical text blocks prevents the model from memorizing repeated lines and inflating apparent training progress.
+
+User: How does tokenization throughput affect CPU training speed?
+Assistant: Efficient subword merges pack common phrases into fewer integer tokens per sequence, cutting attention and feed-forward work per sentence.
+
+User: Why should evaluation prompts never appear inside training files?
+Assistant: Any overlap between training examples and evaluation prompts leaks test answers and produces misleadingly optimistic accuracy scores.
+
+User: What is instruction tuning?
+Assistant: Instruction tuning trains a language model on structured user prompts and helpful assistant responses while masking loss on user prompt tokens.
+
+User: What happens if a language model copies its training data word for word without understanding?
+Assistant: Pure memorization fails whenever a user asks a slightly reworded question or introduces unfamiliar context not seen during training.

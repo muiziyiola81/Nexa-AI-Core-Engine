@@ -1,0 +1,104 @@
+User: What is a prime number?
+Assistant: A prime number is an integer greater than 1 whose only positive divisors are 1 and itself, such as 2, 3, 5, 7, and 11.
+
+User: What is an even number?
+Assistant: An even number is any integer divisible by 2 with zero remainder, such as -4, 0, 2, 8, or 14.
+
+User: How do you find the average (mean) of a list of numbers?
+Assistant: To find the arithmetic mean, add all the numbers together and divide the sum by how many numbers are in the list.
+
+User: What is the median of a dataset?
+Assistant: The median is the middle value when all numbers in a dataset are sorted in ascending order, or the average of the two middle values if the count is even.
+
+User: What is the difference between mean and median?
+Assistant: The mean adds every value and divides by the count, which makes it sensitive to extreme outliers, whereas the median depends only on the middle position.
+
+User: How do you convert a fraction to a percentage?
+Assistant: Divide the numerator by the denominator to get a decimal, then multiply the decimal by 100 to get the percentage.
+
+User: What is 25 percent of 80?
+Assistant: Twenty-five percent equals one quarter, and one quarter of 80 is 20.
+
+User: What is 15 percent of 200?
+Assistant: Ten percent of 200 is 20 and five percent is 10, so 15 percent of 200 equals 30.
+
+User: How do you solve the linear equation 2x + 6 = 14?
+Assistant: Subtract 6 from both sides to get 2x = 8, then divide both sides by 2 to find x = 4.
+
+User: How do you solve 5x - 10 = 25?
+Assistant: Add 10 to both sides to get 5x = 35, then divide by 5 to find x = 7.
+
+User: What is the Pythagorean theorem?
+Assistant: In a right triangle, the square of the hypotenuse c equals the sum of the squares of the other two sides a and b: a^2 + b^2 = c^2.
+
+User: If a right triangle has legs of length 3 and 4, what is the hypotenuse?
+Assistant: Using 3^2 + 4^2 = 9 + 16 = 25, taking the square root gives a hypotenuse of 5.
+
+User: What is the area of a rectangle?
+Assistant: The area of a rectangle equals its width multiplied by its height.
+
+User: What is the area of a triangle?
+Assistant: The area of a triangle equals one-half multiplied by its base multiplied by its vertical height.
+
+User: How do you find the perimeter of a square with side length s?
+Assistant: Since a square has four equal sides, its perimeter is 4 times s.
+
+User: What is the circumference of a circle?
+Assistant: The circumference of a circle is 2 * pi * r, where r is the radius of the circle.
+
+User: What is the area of a circle?
+Assistant: The area of a circle is pi * r^2, where r is the radius.
+
+User: What does an exponent represent?
+Assistant: An exponent tells how many times a base number is multiplied by itself; for example, 2^3 means 2 * 2 * 2 = 8.
+
+User: What is a square root?
+Assistant: The square root of a number x is a value y such that y * y = x; for example, the square root of 49 is 7.
+
+User: What is probability?
+Assistant: Probability is a number between 0 and 1 measuring how likely an event is to occur, where 0 means impossible and 1 means certain.
+
+User: What is the probability of rolling a 4 on a fair six-sided die?
+Assistant: There is 1 favorable outcome out of 6 equally likely faces, so the probability is 1/6.
+
+User: What is a vector in mathematics?
+Assistant: A vector is an ordered list of numbers representing both magnitude and direction in space.
+
+User: What is a dot product of two vectors?
+Assistant: The dot product multiplies matching components of two equal-length vectors and sums those products into a single scalar number.
+
+User: What is a matrix?
+Assistant: A matrix is a rectangular grid of numbers arranged in rows and columns, commonly used to represent linear transformations and data tables.
+
+User: When can two matrices A and B be multiplied as A * B?
+Assistant: Matrix A (m by k) and matrix B (k by n) can be multiplied when the number of columns in A equals the number of rows in B, yielding an m by n matrix.
+
+User: What is a logarithm?
+Assistant: A logarithm answers what exponent a base must be raised to in order to produce a given number; for example, log10(1000) = 3 because 10^3 = 1000.
+
+User: What is the slope of a line?
+Assistant: The slope of a line measures its steepness as the vertical change (rise) divided by the horizontal change (run) between two points.
+
+User: What is a derivative in calculus?
+Assistant: A derivative measures the instantaneous rate of change of a function with respect to its input variable, equal to the slope of the tangent line.
+
+User: What is an integral in calculus?
+Assistant: An integral accumulates a function over an interval and geometrically represents the signed area under the curve.
+
+User: What is standard deviation?
+Assistant: Standard deviation measures how spread out numbers in a dataset are around their mean; small values mean points cluster closely together.
+
+User: What is the value of any nonzero number raised to the power of 0?
+Assistant: Any nonzero number raised to the power of 0 equals 1.
+
+User: How do you add two fractions with the same denominator?
+Assistant: Keep the common denominator unchanged and add the numerators together.
+
+User: What is a ratio?
+Assistant: A ratio compares the relative sizes of two or more quantities, such as 3 apples to 2 oranges written as 3:2.
+
+User: What is a function in algebra?
+Assistant: A function is a rule that assigns each valid input value to exactly one output value.
+
+User: What is an integer?
+Assistant: An integer is a whole number with no fractional or decimal part, including positive numbers, negative numbers, and zero.

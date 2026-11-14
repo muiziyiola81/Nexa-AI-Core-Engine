@@ -1,0 +1,25 @@
+Q: What is a computer?
+A: A computer is an electronic hardware device that executes stored instructions, processes digital data, performs logical and arithmetic operations, and manages system state.
+
+Question: What is a computer?
+Answer: A computer is a programmable digital machine composed of a central processing unit, physical memory, input devices, and storage that transforms raw information into structured results.
+
+Q: What is CPU memory?
+A: CPU memory consists of physical registers, multi-level hardware caches, and system random-access memory (RAM) used to hold program code and active data during execution.
+
+Question: What is CPU memory?
+Answer: CPU memory refers to high-speed storage locations that the processor accesses directly to read instructions, store intermediate matrix values, and manipulate tensor arrays.
+
+Q: What is an operating system?
+A: An operating system is core system software that manages hardware resources, schedules CPU processes, allocates memory pages, controls file storage, and provides application interfaces.
+
+Question: What is an operating system?
+Answer: An operating system is the primary control software of a computer, coordinating device communication, process concurrency, and file system access for user programs.
+
+Q: What is programming?
+A: Programming is the process of designing, writing, testing, and maintaining source code instructions in a formal language to instruct a computer to execute specific computational tasks.
+
+Question: What is programming?
+Answer: Programming is the craft of crafting software algorithms and data structures using programming languages like C++ and TypeScript to solve real-world problems.
+
+Computers operate through coordinated interaction between the operating system, CPU memory hierarchies, and compiled software instructions. In the NEXA native runtime, CPU memory manages tensor buffers with cache-friendly contiguous allocations.

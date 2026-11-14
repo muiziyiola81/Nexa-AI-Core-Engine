@@ -1,0 +1,104 @@
+User: What is work in classical mechanics?
+Assistant: Mechanical work equals the component of applied force along an object's direction of displacement multiplied by the distance moved.
+
+User: State the law of conservation of linear momentum.
+Assistant: When zero net external force acts on a system of colliding bodies, the vector sum of their momenta remains identical before and after impact.
+
+User: What is Hooke's law for an elastic spring?
+Assistant: The restoring force exerted by an ideal spring is proportional to how far it is stretched or compressed from equilibrium, pointing oppositely.
+
+User: Why does pressure increase with depth under water?
+Assistant: Deeper layers must support the gravitational weight of all water columns stacked overhead plus atmospheric air above.
+
+User: What does Archimedes' principle explain about floating ships?
+Assistant: A floating ship displaces a weight of ocean water equal to the ship's own total weight, balancing gravity with upward buoyant force.
+
+User: What is the Doppler effect in sound and light?
+Assistant: Waves emitted by an approaching source compress to higher observed frequency, while waves from a receding source stretch to lower frequency.
+
+User: What is an electromagnetic wave?
+Assistant: An electromagnetic wave consists of oscillating electric and magnetic fields propagating together through empty space or matter at light speed.
+
+User: How does direct current differ from alternating current?
+Assistant: Direct current pushes electrons steadily in one direction like a battery, whereas alternating current reverses flow direction periodically like wall outlets.
+
+User: What is electrical power in watts?
+Assistant: Electrical power equals voltage multiplied by current, measuring how many joules of energy a circuit converts each second.
+
+User: What is Avogadro's number used for in chemistry?
+Assistant: Avogadro's number defines one mole as roughly 6.022 times ten to the twenty-third atoms or molecules, linking microscopic particles to measurable grams.
+
+User: What is the difference between a solvent and a solute?
+Assistant: A solute is the substance dissolved, such as salt, while the solvent is the larger medium dissolving it, such as water.
+
+User: What makes an oxidation-reduction reaction distinct?
+Assistant: Redox reactions transfer electrons between chemical species, with one reactant oxidized by losing electrons and another reduced by gaining electrons.
+
+User: Why do noble gases rarely form chemical compounds?
+Assistant: Noble gas atoms already possess full outer valence electron shells, giving them minimal incentive to gain, lose, or share electrons.
+
+User: What is an exothermic reaction?
+Assistant: An exothermic reaction releases net thermal energy into its surroundings as chemical bonds rearrange, causing temperatures nearby to rise.
+
+User: What is an endothermic process?
+Assistant: An endothermic process absorbs thermal energy from surrounding matter, making its environment feel cooler while reacting or melting.
+
+User: Why does stirring sugar into hot tea dissolve it faster than in iced tea?
+Assistant: Faster thermal molecular motion and fresh contact with unsaturated liquid speed up breaking apart and dispersing sugar crystals.
+
+User: What is mitosis in eukaryotic cells?
+Assistant: Mitosis is cell division that duplicates genetic chromosomes precisely so two genetically identical daughter cells form for growth and tissue repair.
+
+User: How does meiosis differ from mitosis?
+Assistant: Meiosis uses two division rounds to halve chromosome count and shuffle genetic variation when producing reproductive egg or sperm cells.
+
+User: What role do ribosomes perform inside cells?
+Assistant: Ribosomes read messenger RNA sequences and link matching amino acids together step by step to assemble functional proteins.
+
+User: What is natural selection in biology?
+Assistant: Natural selection favors heritable traits that improve survival and reproduction in a given environment, shifting population traits over generations.
+
+User: Why do antibiotics fail against viral infections like influenza?
+Assistant: Antibiotics target bacterial cell walls or bacterial machinery, whereas viruses lack those structures and replicate inside host human cells.
+
+User: What is transpiration in plants?
+Assistant: Transpiration pulls water upward from roots through xylem vessels and releases water vapor out through tiny leaf pores called stomata.
+
+User: What are igneous rocks?
+Assistant: Igneous rocks crystallize directly when molten magma cools slowly deep underground or when volcanic lava solidifies quickly at the surface.
+
+User: How do metamorphic rocks form?
+Assistant: Metamorphic rocks arise when existing rocks undergo intense heat and crustal pressure deep underground without melting completely, recrystallizing new textures.
+
+User: What causes wind across Earth's surface?
+Assistant: Uneven solar heating creates warm rising air and cooler dense air masses, pushing air horizontally from high-pressure zones toward low-pressure zones.
+
+User: What is a lunar eclipse?
+Assistant: A lunar eclipse happens when Earth passes directly between the Sun and a full Moon, casting Earth's shadow across the Moon's face.
+
+User: What is a solar eclipse?
+Assistant: A solar eclipse occurs during a new Moon when the Moon lines up directly between Earth and the Sun, blocking sunlight over a narrow path.
+
+User: Why is Mars reddish in color?
+Assistant: Fine iron-rich dust covering the Martian surface oxidized over billions of years, giving the rocks and soil a rusty orange-red tint.
+
+User: What is an exoplanet?
+Assistant: An exoplanet is a planet orbiting a star outside our own solar system.
+
+User: Why does water have unusually high surface tension?
+Assistant: Strong hydrogen bonds pull water molecules tightly inward toward neighboring molecules, forming a cohesive elastic film at the surface.
+
+User: What happens during nuclear fission?
+Assistant: A heavy unstable atomic nucleus such as uranium splits into lighter nuclei upon absorbing a neutron, releasing binding energy and extra neutrons.
+
+User: Why do skyscrapers include expansion joints?
+Assistant: Steel and concrete expand in summer heat and contract in winter cold, so small flexible joints prevent internal stress from cracking the structure.
+
+User: What is pH neutrality?
+Assistant: A pH value of exactly 7 at 25 degrees Celsius marks a neutral aqueous solution like pure water, neither acidic nor basic.
+
+User: How do plants fix atmospheric nitrogen indirectly?
+Assistant: Symbiotic soil bacteria living inside legume root nodules convert nitrogen gas into usable ammonia compounds for plants.
+
+User: Why does high altitude cause shortness of breath for unacclimated hikers?
+Assistant: Lower barometric pressure at mountain altitudes means fewer oxygen molecules enter the lungs with each normal breath.

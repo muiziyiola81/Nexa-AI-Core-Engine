@@ -1,0 +1,58 @@
+general_english|factual|clear,understand,reader,simple|Why is plain language helpful when writing instructions?
+general_english|factual|similar,opposite,word,meaning|How does a synonym differ from an antonym?
+general_english|factual|short,main,points,text|What is the goal when writing a summary?
+general_english|factual|proof,evidence,belief,personal|How can a reader distinguish a fact from an opinion?
+general_english|factual|order,words,alphabetical,topics|How does a table of contents differ from an index?
+general_english|factual|comparison,like,as,metaphor|What distinguishes a metaphor from a simile?
+general_english|factual|reason,result,happens,outcome|Explain the relationship between cause and effect.
+general_english|factual|trust,accurate,truth,depend|Why does clear and honest communication matter in teamwork?
+computer_science|factual|instructions,memory,arithmetic,processor|What role does the central processing unit play in a computer?
+computer_science|factual|temporary,power,fast,storage|Why does a computer need RAM if it already has an SSD?
+computer_science|factual|isolated,memory,share,execution|What distinguishes a thread from a process?
+computer_science|factual|sorted,middle,half,log|Why is binary search faster than checking every item one by one?
+computer_science|factual|key,bucket,lookup,average|How does a hash table find values quickly?
+computer_science|factual|lifo,fifo,order,stack|Compare how a stack and a queue order items.
+computer_science|factual|machine,source,compile,execute|What does a C++ compiler produce from source code?
+computer_science|factual|domain,ip,address,name|Why do web browsers rely on DNS before connecting to a site?
+computer_science|factual|training,validation,memorize,unseen|How can you tell when a machine learning model is overfitting?
+computer_science|factual|token,merge,frequent,subword|How does Byte Pair Encoding build a subword vocabulary?
+mathematics|factual|1,itself,divisors,greater|How do you check whether a number is prime?
+mathematics|factual|sum,divide,count,middle|When is the median more useful than the mean?
+mathematics|factual|25,10,15,hundred|What is 10 percent of 250?
+mathematics|factual|solve,x,3,equation|Solve the linear equation 3x + 3 = 18.
+mathematics|factual|right,hypotenuse,legs,13|If a right triangle has legs of 5 and 12, what is the length of the hypotenuse?
+mathematics|factual|half,base,height,triangle|How do you compute the area of a triangle?
+mathematics|factual|pi,radius,circle,area|What formula gives the area of a circle from its radius?
+mathematics|factual|0,1,likely,certain|What range of values can a probability take?
+mathematics|factual|1,6,fair,die|What is the probability of rolling an odd number on a six-sided die?
+mathematics|factual|multiply,components,sum,scalar|How do you compute the dot product of two vectors?
+mathematics|factual|columns,rows,equal,multiply|What condition must two matrices satisfy to be multiplied together?
+mathematics|factual|rate,change,slope,tangent|What does a derivative tell you about a function?
+science|factual|mass,force,gravity,change|Why does an astronaut's weight change on the Moon while their mass stays the same?
+science|factual|rest,motion,force,constant|Summarize Newton's first law of motion in one sentence.
+science|factual|created,destroyed,form,energy|What happens to total energy when fuel burns in an engine?
+science|factual|motion,stored,height,kinetic|Give an example showing potential energy turning into kinetic energy.
+science|factual|solid,liquid,gas,shape|How do the particles in a solid differ from those in a gas?
+science|factual|protons,neutrons,electrons,nucleus|Describe the basic parts inside an atom.
+science|factual|sunlight,glucose,oxygen,water|What inputs and outputs are involved in photosynthesis?
+science|factual|atp,energy,cell,respiration|Why are mitochondria important for animal and plant cells?
+science|factual|tilt,axis,orbit,sunlight|Why is it summer in the northern hemisphere while it is winter in the southern hemisphere?
+science|factual|vacuum,medium,particles,vibration|Why can astronauts not hear explosions in outer space?
+science|factual|dense,water,float,crystal|Why do ice cubes float near the top of a glass of water?
+science|factual|copper,rubber,electrons,flow|Why are electrical wires made of copper coated in plastic?
+explanations_instructions|instruction|steps,small,test,debug|Give three practical steps for debugging an unexpected program error.
+explanations_instructions|instruction|steps,study,practice,quiz|Outline a short plan to prepare effectively for a math test.
+explanations_instructions|instruction|recipe,inputs,steps,output|Explain what a function in programming is using a simple everyday comparison.
+explanations_instructions|instruction|celsius,fahrenheit,multiply,32|How do you convert 20 degrees Celsius into Fahrenheit?
+explanations_instructions|instruction|reproduce,expected,actual,error|What details should go into a helpful bug report?
+explanations_instructions|instruction|smaller,progress,manage,overwhelm|Why is splitting a complex project into milestones helpful?
+followup_conversation|conversation|help,explain,clear,question|Hi, can you answer science and coding questions?
+followup_conversation|conversation|welcome,glad,help,question|Thanks for the clear explanation about CPUs!
+followup_conversation|followup|algorithm,steps,sorted,list|User: What is sorting?\nAssistant: Sorting arranges items in a defined order such as ascending numbers or alphabetical text.\nUser: Why is sorting helpful before searching?
+followup_conversation|followup|ram,storage,ssd,power|User: What does an SSD store?\nAssistant: An SSD stores files and operating systems permanently even when power is off.\nUser: Can an SSD replace RAM completely?
+uncertainty_refusal|uncertainty|cannot,don't,know,access,real-time|What is the current temperature outside in London right now?
+uncertainty_refusal|uncertainty|cannot,don't,know,access,private|What is my home street address?
+uncertainty_refusal|uncertainty|cannot,don't,know,predict,future|Who will win the Nobel Prize in Physics three years from now?
+uncertainty_refusal|uncertainty|cannot,don't,know,missing,provide|Summarize the third paragraph of the book I am holding.
+uncertainty_refusal|uncertainty|cannot,don't,know,live,price|What is the price of gold per ounce at this exact minute?
+uncertainty_refusal|uncertainty|cannot,don't,know,secret,private|What PIN code did I set on my phone yesterday?

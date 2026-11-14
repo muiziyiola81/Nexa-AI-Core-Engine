@@ -1,0 +1,22 @@
+{
+  "name": "nexa-phase35-multidomain-corpus",
+  "version": "1.0.0",
+  "source": "Original local plain-text corpus authored directly inside the NEXA project",
+  "license": "MIT",
+  "externalDownloads": false,
+  "trainValDirectory": "data/datasets/phase35/train_val",
+  "unseenTestFile": "data/datasets/phase35/unseen_test_qa.txt",
+  "files": [
+    { "path": "data/datasets/phase35/train_val/general_english.txt", "domain": "general_english", "bytes": 6764, "lines": 119 },
+    { "path": "data/datasets/phase35/train_val/computer_science.txt", "domain": "computer_science", "bytes": 7856, "lines": 119 },
+    { "path": "data/datasets/phase35/train_val/mathematics.txt", "domain": "mathematics", "bytes": 5600, "lines": 104 },
+    { "path": "data/datasets/phase35/train_val/science.txt", "domain": "science", "bytes": 6833, "lines": 104 },
+    { "path": "data/datasets/phase35/train_val/instructions_conversations.txt", "domain": "instructions_conversations_and_uncertainty", "bytes": 6560, "lines": 93 },
+    { "path": "data/datasets/phase35/unseen_test_qa.txt", "domain": "unseen_evaluation_set", "bytes": 6475, "lines": 58 }
+  ],
+  "totalBytes": 40088,
+  "totalLines": 597,
+  "trainValExamples": 178,
+  "unseenTestQuestions": 58,
+  "unseenTrainOverlap": 0
+}

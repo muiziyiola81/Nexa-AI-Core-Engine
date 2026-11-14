@@ -1,0 +1,119 @@
+User: What is a rational number?
+Assistant: A rational number is any value writable as a ratio p divided by q of two integers where the denominator q is nonzero.
+
+User: How do you find the area of a trapezoid?
+Assistant: Average the lengths of the two parallel bases and multiply that average by the perpendicular height.
+
+User: What is the interior angle sum of a convex quadrilateral?
+Assistant: Dividing any quadrilateral into two triangles shows its four interior angles always sum to 360 degrees.
+
+User: What is the interior angle sum of a regular pentagon?
+Assistant: Subtracting 2 from 5 sides and multiplying by 180 degrees gives 540 degrees total, or 108 degrees per angle.
+
+User: Solve the linear inequality 2x - 3 < 9.
+Assistant: Add 3 to both sides to get 2x < 12, then divide by 2 to find x < 6.
+
+User: What is absolute value?
+Assistant: Absolute value measures a number's nonnegative distance from zero on the number line regardless of sign.
+
+User: Simplify the fraction 42 over 56 to lowest terms.
+Assistant: Dividing both numerator and denominator by their greatest common divisor 14 reduces the fraction to three fourths.
+
+User: What is scientific notation?
+Assistant: Scientific notation expresses very large or tiny numbers cleanly as a coefficient between 1 and 10 multiplied by an integer power of 10.
+
+User: Convert 0.00045 into scientific notation.
+Assistant: Moving the decimal point four places to the right gives 4.5 times 10 raised to the negative fourth power.
+
+User: What is the reciprocal of three fifths?
+Assistant: Flipping numerator and denominator yields five thirds, whose product with three fifths equals 1.
+
+User: What is a prime number between 30 and 40?
+Assistant: Both 31 and 37 are prime numbers between 30 and 40 because neither has divisors besides 1 and itself.
+
+User: Calculate 25 squared mentally using an algebraic trick.
+Assistant: Think of 25 as 20 plus 5, or multiply 2 times 3 to get 6 followed by 25, giving 625.
+
+User: How many permutations can be formed from three distinct letters A, B, and C?
+Assistant: Three factorial equals 3 times 2 times 1, yielding 6 distinct orderings.
+
+User: What is the binomial coefficient 6 choose 2?
+Assistant: Multiply 6 times 5 and divide by 2 to get 15 distinct two-element combinations.
+
+User: What does independent events mean in probability?
+Assistant: Two events are independent if knowing one occurred does not change the probability of the other occurring.
+
+User: If you roll two fair six-sided dice, what is the chance both show 6?
+Assistant: Multiplying one sixth by one sixth equals one thirty-sixth.
+
+User: What is a weighted average?
+Assistant: A weighted average multiplies each score by its assigned importance weight and divides the sum by the total weight sum.
+
+User: Why is the interquartile range resistant to extreme outliers?
+Assistant: The interquartile range spans only the middle 50 percent between the 25th and 75th percentiles, ignoring extreme highs and lows.
+
+User: What does positive correlation between two variables mean?
+Assistant: Positive correlation means larger values of one variable tend to coincide with larger values of the other variable on average.
+
+User: What is a skew-symmetric or antisymmetric relationship?
+Assistant: An antisymmetric matrix equals the negative of its own transpose, meaning diagonal elements are zero and opposite off-diagonals negate.
+
+User: How do you compute the magnitude of a 3D vector (3, 4, 12)?
+Assistant: Summing squares 9 plus 16 plus 144 gives 169, whose positive square root is 13.
+
+User: What is scalar projection of vector A onto unit vector u?
+Assistant: Taking the dot product of vector A with unit vector u gives the signed component length of A pointing along u.
+
+User: When is the dot product of two nonzero vectors equal to zero?
+Assistant: Two nonzero vectors have a zero dot product precisely when they meet at a 90-degree right angle, making them orthogonal.
+
+User: What is the derivative of e raised to the power x?
+Assistant: The natural exponential function e to the x equals its own derivative everywhere.
+
+User: What is the derivative of natural logarithm ln(x) for positive x?
+Assistant: Differentiating ln(x) gives 1 divided by x for all positive real numbers x.
+
+User: What does the product rule state in differential calculus?
+Assistant: The derivative of f(x) times g(x) equals f'(x)g(x) plus f(x)g'(x).
+
+User: What is an inflection point on a smooth curve?
+Assistant: An inflection point is where a curve switches concavity from bending upward to downward or vice versa.
+
+User: Why is mathematical induction useful for proving statements over all integers?
+Assistant: Proving a base case for n equals 1 and showing truth at k implies truth at k plus 1 establishes validity for every natural number.
+
+User: What is a contradiction proof?
+Assistant: A proof by contradiction assumes the opposite of the target claim, derives a logical impossibility, and concludes the original claim must hold.
+
+User: Explain the pigeonhole principle simply.
+Assistant: If more objects than containers are placed into containers, at least one container must hold two or more objects.
+
+User: How many bits are required to represent 256 distinct values?
+Assistant: Since 2 raised to the eighth power equals 256, eight bits can encode 256 unique states from 0 through 255.
+
+User: Convert hexadecimal number 1F into base ten decimal.
+Assistant: Multiply 1 by 16 and add F equals 15 to get 31 in decimal.
+
+User: What is a geometric mean of 4 and 9?
+Assistant: Multiply 4 by 9 to get 36 and take the square root, yielding 6.
+
+User: If a train travels 180 kilometers in 2.5 hours, what is its average speed?
+Assistant: Divide 180 kilometers by 2.5 hours to obtain 72 kilometers per hour.
+
+User: What is the perimeter of an equilateral triangle with side length 9?
+Assistant: All three sides equal 9, so total perimeter equals 3 times 9, which is 27.
+
+User: How do you simplify a square root like sqrt(72)?
+Assistant: Factor 72 into 36 times 2, then extract the square root of 36 outside to get 6 times sqrt(2).
+
+User: What is a set intersection?
+Assistant: The intersection of two sets A and B contains only the elements belonging simultaneously to both A and B.
+
+User: What is a set union?
+Assistant: The union of sets A and B collects every element that appears in A, in B, or in both sets.
+
+User: What is a function's domain versus its range?
+Assistant: The domain is the set of all valid inputs accepted by a function, while the range is the set of all outputs it produces.
+
+User: What makes a linear system consistent?
+Assistant: A system of linear equations is consistent if at least one assignment of variables satisfies every equation simultaneously.

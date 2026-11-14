@@ -1,0 +1,8 @@
+{
+  "name": "nexa-phase36-tier1-small",
+  "version": "3.6-tier1-1.0.0",
+  "source": "Original NEXA Project Phase 3.6 Authored Corpus (Tier 1 Small)",
+  "license": "MIT",
+  "externalDownloads": false,
+  "unseenTestFile": "data/datasets/phase36/unseen_test_expanded.txt"
+}

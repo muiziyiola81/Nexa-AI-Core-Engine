@@ -1,0 +1,19 @@
+{
+  "activeAdapterId": "nexa-native",
+  "modelsDirectory": "/app/applet/models",
+  "llamaCppServerUrl": "http://127.0.0.1:8080",
+  "llamaCppBinaryPath": "",
+  "maxConcurrentRequests": 4,
+  "defaultContextWindow": 4096,
+  "defaultThreads": 4,
+  "requireApiKey": false,
+  "rateLimitPerMinute": 120,
+  "maxTokensPerRequest": 4096,
+  "executionBackend": "auto",
+  "allowedOrigins": [
+    "*"
+  ],
+  "autoLoadModels": [],
+  "autoRegisterCheckpoints": true,
+  "autoLoadOnDemand": false
+}

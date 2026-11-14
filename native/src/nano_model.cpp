@@ -1,0 +1,1085 @@
+/**
+ * NEXA Native Training Engine - NEXA-1 Nano Model Implementation
+ */
+
+#include "../include/nexa/nano_model.hpp"
+#include <cmath>
+#include <cstring>
+#include <fstream>
+#include <iostream>
+#include <algorithm>
+#include <chrono>
+
+namespace nexa {
+
+NexaNanoModel::NexaNanoModel(const NanoConfig& cfg, uint64_t initSeed)
+    : config(cfg) {
+    initWeights(initSeed);
+}
+
+void NexaNanoModel::initWeights(uint64_t seed) {
+    allParams.clear();
+    const float dScale = 1.0f / std::sqrt(static_cast<float>(config.dim));
+    const float iScale = 1.0f / std::sqrt(static_cast<float>(config.intermediateDim));
+
+    // 1. Embeddings
+    wEmbed = GradTensor("model.embed_tokens.weight", Shape({static_cast<int64_t>(config.vocabSize), static_cast<int64_t>(config.dim)}));
+    wEmbed.fillRandom(config.initStddev, seed++);
+    allParams.push_back(&wEmbed);
+
+    wPos = GradTensor("model.embed_positions.weight", Shape({static_cast<int64_t>(config.maxSeqLen), static_cast<int64_t>(config.dim)}));
+    wPos.fillRandom(config.initStddev, seed++);
+    allParams.push_back(&wPos);
+
+    // 2. Transformer Layers
+    layers.resize(config.nLayers);
+    for (uint32_t l = 0; l < config.nLayers; ++l) {
+        std::string pfx = "model.layers." + std::to_string(l) + ".";
+
+        LayerParams& lp = layers[l];
+        lp.attnNorm = GradTensor(pfx + "attn_norm.weight", Shape({static_cast<int64_t>(config.dim)}));
+        lp.attnNorm.value.fillConstant(1.0f);
+        allParams.push_back(&lp.attnNorm);
+
+        lp.wQ = GradTensor(pfx + "self_attn.q_proj.weight", Shape({static_cast<int64_t>(config.dim), static_cast<int64_t>(config.dim)}));
+        lp.wQ.fillRandom(dScale, seed++);
+        allParams.push_back(&lp.wQ);
+
+        lp.wK = GradTensor(pfx + "self_attn.k_proj.weight", Shape({static_cast<int64_t>(config.dim), static_cast<int64_t>(config.dim)}));
+        lp.wK.fillRandom(dScale, seed++);
+        allParams.push_back(&lp.wK);
+
+        lp.wV = GradTensor(pfx + "self_attn.v_proj.weight", Shape({static_cast<int64_t>(config.dim), static_cast<int64_t>(config.dim)}));
+        lp.wV.fillRandom(dScale, seed++);
+        allParams.push_back(&lp.wV);
+
+        lp.wOut = GradTensor(pfx + "self_attn.o_proj.weight", Shape({static_cast<int64_t>(config.dim), static_cast<int64_t>(config.dim)}));
+        lp.wOut.fillRandom(dScale, seed++);
+        allParams.push_back(&lp.wOut);
+
+        lp.ffnNorm = GradTensor(pfx + "ffn_norm.weight", Shape({static_cast<int64_t>(config.dim)}));
+        lp.ffnNorm.value.fillConstant(1.0f);
+        allParams.push_back(&lp.ffnNorm);
+
+        lp.wGate = GradTensor(pfx + "mlp.gate_proj.weight", Shape({static_cast<int64_t>(config.dim), static_cast<int64_t>(config.intermediateDim)}));
+        lp.wGate.fillRandom(dScale, seed++);
+        allParams.push_back(&lp.wGate);
+
+        lp.wUp = GradTensor(pfx + "mlp.up_proj.weight", Shape({static_cast<int64_t>(config.dim), static_cast<int64_t>(config.intermediateDim)}));
+        lp.wUp.fillRandom(dScale, seed++);
+        allParams.push_back(&lp.wUp);
+
+        lp.wDown = GradTensor(pfx + "mlp.down_proj.weight", Shape({static_cast<int64_t>(config.intermediateDim), static_cast<int64_t>(config.dim)}));
+        lp.wDown.fillRandom(iScale, seed++);
+        allParams.push_back(&lp.wDown);
+    }
+
+    // 3. Final Norm and Output Projection
+    finalNorm = GradTensor("model.norm.weight", Shape({static_cast<int64_t>(config.dim)}));
+    finalNorm.value.fillConstant(1.0f);
+    allParams.push_back(&finalNorm);
+
+    wHead = GradTensor("lm_head.weight", Shape({static_cast<int64_t>(config.dim), static_cast<int64_t>(config.vocabSize)}));
+    wHead.fillRandom(dScale, seed++);
+    allParams.push_back(&wHead);
+}
+
+void NexaNanoModel::zeroGrad() {
+    for (auto* p : allParams) {
+        p->zeroGrad();
+    }
+}
+
+int64_t NexaNanoModel::totalParameters() const {
+    int64_t total = 0;
+    for (const auto* p : allParams) {
+        total += p->value.numel();
+    }
+    return total;
+}
+
+ModelMemoryEstimate NexaNanoModel::estimateMemory(const NanoConfig& cfg) {
+    ModelMemoryEstimate est;
+    const int64_t V = cfg.vocabSize;
+    const int64_t D = cfg.dim;
+    const int64_t I = cfg.intermediateDim;
+    const int64_t L = cfg.nLayers;
+    const int64_t T = cfg.maxSeqLen;
+    const int64_t H = cfg.nHeads;
+
+    int64_t embedParams = V * D + T * D;
+    int64_t perLayerParams = 2 * D + 4 * D * D + 3 * D * I;
+    int64_t headParams = D + D * V;
+
+    est.totalParameters = embedParams + L * perLayerParams + headParams;
+    est.weightsBytes = static_cast<uint64_t>(est.totalParameters) * sizeof(float);
+    est.gradientsBytes = est.weightsBytes;
+    est.optimizerBytes = est.weightsBytes * 2ULL; // AdamW m and v
+
+    // Per-layer cached activations for training sequence length T
+    int64_t perLayerActFloats = (7 * T * D) + (H * T * T) + (4 * T * I) + (2 * T);
+    int64_t totalActFloats = (3 * T * D) + L * perLayerActFloats + (T * D + T) + (2 * T * V);
+    est.activationsBytes = static_cast<uint64_t>(totalActFloats) * sizeof(float);
+    est.totalInferenceBytes = est.weightsBytes + static_cast<uint64_t>(4 * T * D + T * V) * sizeof(float);
+    est.totalTrainingBytes = est.weightsBytes + est.gradientsBytes + est.optimizerBytes + est.activationsBytes;
+    return est;
+}
+
+ModelMemoryEstimate NexaNanoModel::estimateMemoryWithOptions(
+    const NanoConfig& cfg,
+    bool simulateTiedEmbeddings,
+    bool simulateRopeNoWPos,
+    uint32_t overrideMaxSeqLen
+) {
+    NanoConfig effective = cfg;
+    if (overrideMaxSeqLen > 0) {
+        effective.maxSeqLen = overrideMaxSeqLen;
+    }
+    ModelMemoryEstimate est = estimateMemory(effective);
+    int64_t savedParams = 0;
+    if (simulateTiedEmbeddings) {
+        savedParams += static_cast<int64_t>(effective.dim) * static_cast<int64_t>(effective.vocabSize);
+    }
+    if (simulateRopeNoWPos) {
+        savedParams += static_cast<int64_t>(effective.maxSeqLen) * static_cast<int64_t>(effective.dim);
+    }
+    if (savedParams > 0 && savedParams < est.totalParameters) {
+        est.totalParameters -= savedParams;
+        est.weightsBytes = static_cast<uint64_t>(est.totalParameters) * sizeof(float);
+        est.gradientsBytes = est.weightsBytes;
+        est.optimizerBytes = est.weightsBytes * 2ULL;
+        est.totalInferenceBytes = est.weightsBytes +
+            static_cast<uint64_t>(4 * static_cast<int64_t>(effective.maxSeqLen) * static_cast<int64_t>(effective.dim) +
+                                  static_cast<int64_t>(effective.maxSeqLen) * static_cast<int64_t>(effective.vocabSize)) * sizeof(float);
+        est.totalTrainingBytes = est.weightsBytes + est.gradientsBytes + est.optimizerBytes + est.activationsBytes;
+    }
+    return est;
+}
+
+ArchitecturePrepSpec NexaNanoModel::getArchitecturePrepSpec() {
+    ArchitecturePrepSpec spec;
+    return spec;
+}
+
+void NexaNanoModel::forward(const std::vector<int32_t>& inputTokens, Tensor& logitsOut) {
+    ModelActivations act;
+    const int64_t seqLen = static_cast<int64_t>(inputTokens.size());
+    if (seqLen <= 0 || seqLen > static_cast<int64_t>(config.maxSeqLen)) {
+        throw std::invalid_argument("forward: inputTokens length exceeds config.maxSeqLen");
+    }
+    const int64_t dim = config.dim;
+    const int64_t vocab = config.vocabSize;
+
+    // 1. Embedding lookup
+    act.embedOut = Tensor(Shape({seqLen, dim}));
+    AutogradOps::embeddingForward(inputTokens, wEmbed.value, act.embedOut);
+
+    // 2. Add learned positional embedding
+    act.initialX = Tensor(Shape({seqLen, dim}));
+    const float* emb = act.embedOut.dataFloat();
+    const float* pos = wPos.value.dataFloat();
+    float* xCur = act.initialX.dataFloat();
+
+    for (int64_t t = 0; t < seqLen; ++t) {
+        for (int64_t d = 0; d < dim; ++d) {
+            xCur[t * dim + d] = emb[t * dim + d] + pos[t * dim + d];
+        }
+    }
+
+    Tensor x = act.initialX;
+    const int64_t nHeads = config.nHeads;
+    const int64_t headDim = dim / nHeads;
+    const float scale = 1.0f / std::sqrt(static_cast<float>(headDim));
+
+    for (uint32_t l = 0; l < config.nLayers; ++l) {
+        LayerParams& lp = layers[l];
+
+        // Attention pre-norm
+        Tensor xNormAttn(Shape({seqLen, dim}));
+        Tensor invRmsAttn(Shape({seqLen}));
+        AutogradOps::rmsnormForward(x, lp.attnNorm.value, xNormAttn, invRmsAttn, config.normEps);
+
+        // Q, K, V
+        Tensor q(Shape({seqLen, dim}));
+        Tensor k(Shape({seqLen, dim}));
+        Tensor v(Shape({seqLen, dim}));
+        AutogradOps::matmulForward(xNormAttn, lp.wQ.value, q);
+        AutogradOps::matmulForward(xNormAttn, lp.wK.value, k);
+        AutogradOps::matmulForward(xNormAttn, lp.wV.value, v);
+
+        // Causal multi-head self-attention
+        Tensor attnContext(Shape({seqLen, dim}));
+        attnContext.fillZero();
+
+        const float* qD = q.dataFloat();
+        const float* kD = k.dataFloat();
+        const float* vD = v.dataFloat();
+        float* ctxD = attnContext.dataFloat();
+
+        for (int64_t h = 0; h < nHeads; ++h) {
+            for (int64_t i = 0; i < seqLen; ++i) {
+                std::vector<float> scores(i + 1);
+                float maxS = -1e9f;
+
+                for (int64_t j = 0; j <= i; ++j) {
+                    float dot = 0.0f;
+                    int64_t qOff = i * dim + h * headDim;
+                    int64_t kOff = j * dim + h * headDim;
+                    for (int64_t d = 0; d < headDim; ++d) {
+                        dot += qD[qOff + d] * kD[kOff + d];
+                    }
+                    float s = dot * scale;
+                    scores[j] = s;
+                    if (s > maxS) maxS = s;
+                }
+
+                float sumExp = 0.0f;
+                for (int64_t j = 0; j <= i; ++j) {
+                    scores[j] = std::exp(scores[j] - maxS);
+                    sumExp += scores[j];
+                }
+                float invSum = sumExp > 0.0f ? (1.0f / sumExp) : 0.0f;
+                for (int64_t j = 0; j <= i; ++j) {
+                    scores[j] *= invSum;
+                }
+
+                int64_t ctxOff = i * dim + h * headDim;
+                for (int64_t j = 0; j <= i; ++j) {
+                    float w = scores[j];
+                    int64_t vOff = j * dim + h * headDim;
+                    for (int64_t d = 0; d < headDim; ++d) {
+                        ctxD[ctxOff + d] += w * vD[vOff + d];
+                    }
+                }
+            }
+        }
+
+        // Out projection & residual
+        Tensor attnOut(Shape({seqLen, dim}));
+        AutogradOps::matmulForward(attnContext, lp.wOut.value, attnOut);
+
+        Tensor x1(Shape({seqLen, dim}));
+        Tensor::vecAdd(x, attnOut, x1);
+
+        // FFN pre-norm
+        Tensor xNormFfn(Shape({seqLen, dim}));
+        Tensor invRmsFfn(Shape({seqLen}));
+        AutogradOps::rmsnormForward(x1, lp.ffnNorm.value, xNormFfn, invRmsFfn, config.normEps);
+
+        // SwiGLU: (SiLU(x * wGate) * (x * wUp)) * wDown
+        Tensor ffnGate(Shape({seqLen, static_cast<int64_t>(config.intermediateDim)}));
+        Tensor ffnUp(Shape({seqLen, static_cast<int64_t>(config.intermediateDim)}));
+        AutogradOps::matmulForward(xNormFfn, lp.wGate.value, ffnGate);
+        AutogradOps::matmulForward(xNormFfn, lp.wUp.value, ffnUp);
+
+        Tensor ffnSilu(Shape({seqLen, static_cast<int64_t>(config.intermediateDim)}));
+        AutogradOps::siluForward(ffnGate, ffnSilu);
+
+        Tensor ffnHidden(Shape({seqLen, static_cast<int64_t>(config.intermediateDim)}));
+        Tensor::vecMul(ffnSilu, ffnUp, ffnHidden);
+
+        Tensor ffnOut(Shape({seqLen, dim}));
+        AutogradOps::matmulForward(ffnHidden, lp.wDown.value, ffnOut);
+
+        // Second residual
+        Tensor x2(Shape({seqLen, dim}));
+        Tensor::vecAdd(x1, ffnOut, x2);
+        x = x2;
+    }
+
+    // Final RMSNorm
+    Tensor finalNormOut(Shape({seqLen, dim}));
+    Tensor finalInvRms(Shape({seqLen}));
+    AutogradOps::rmsnormForward(x, finalNorm.value, finalNormOut, finalInvRms, config.normEps);
+
+    // LM Head
+    if (logitsOut.rank() != 2 || logitsOut.shape()[0] != seqLen || logitsOut.shape()[1] != vocab) {
+        logitsOut = Tensor(Shape({seqLen, vocab}));
+    }
+    AutogradOps::matmulForward(finalNormOut, wHead.value, logitsOut);
+}
+
+float NexaNanoModel::forwardAndLoss(
+    const std::vector<int32_t>& inputTokens,
+    const std::vector<int32_t>& targetTokens,
+    ModelActivations& act,
+    int32_t ignoreIndex
+) {
+    const int64_t seqLen = static_cast<int64_t>(inputTokens.size());
+    if (seqLen <= 0 || seqLen > static_cast<int64_t>(config.maxSeqLen)) {
+        throw std::invalid_argument("forwardAndLoss: inputTokens length exceeds config.maxSeqLen");
+    }
+    const int64_t dim = config.dim;
+    const int64_t vocab = config.vocabSize;
+    act.tokens = inputTokens;
+
+    // ------------------------------------------------------------------------
+    // FORWARD PASS (Caching intermediate activations for backprop)
+    // ------------------------------------------------------------------------
+    act.embedOut = Tensor(Shape({seqLen, dim}));
+    AutogradOps::embeddingForward(inputTokens, wEmbed.value, act.embedOut);
+
+    act.posOut = Tensor(Shape({seqLen, dim}));
+    std::memcpy(act.posOut.dataFloat(), wPos.value.dataFloat(), seqLen * dim * sizeof(float));
+
+    act.initialX = Tensor(Shape({seqLen, dim}));
+    Tensor::vecAdd(act.embedOut, act.posOut, act.initialX);
+
+    act.layers.resize(config.nLayers);
+    Tensor x = act.initialX;
+
+    const int64_t nHeads = config.nHeads;
+    const int64_t headDim = dim / nHeads;
+    const float scale = 1.0f / std::sqrt(static_cast<float>(headDim));
+
+    for (uint32_t l = 0; l < config.nLayers; ++l) {
+        LayerParams& lp = layers[l];
+        LayerActivations& la = act.layers[l];
+
+        // 1. Attn pre-norm
+        la.xNormAttn = Tensor(Shape({seqLen, dim}));
+        la.invRmsAttn = Tensor(Shape({seqLen}));
+        AutogradOps::rmsnormForward(x, lp.attnNorm.value, la.xNormAttn, la.invRmsAttn, config.normEps);
+
+        // 2. Q, K, V
+        la.q = Tensor(Shape({seqLen, dim}));
+        la.k = Tensor(Shape({seqLen, dim}));
+        la.v = Tensor(Shape({seqLen, dim}));
+        AutogradOps::matmulForward(la.xNormAttn, lp.wQ.value, la.q);
+        AutogradOps::matmulForward(la.xNormAttn, lp.wK.value, la.k);
+        AutogradOps::matmulForward(la.xNormAttn, lp.wV.value, la.v);
+
+        // 3. Multi-Head Attention
+        la.attnProbs = Tensor(Shape({nHeads, seqLen, seqLen}));
+        la.attnProbs.fillZero();
+        la.attnContext = Tensor(Shape({seqLen, dim}));
+        la.attnContext.fillZero();
+
+        const float* qD = la.q.dataFloat();
+        const float* kD = la.k.dataFloat();
+        const float* vD = la.v.dataFloat();
+        float* pD = la.attnProbs.dataFloat();
+        float* ctxD = la.attnContext.dataFloat();
+
+        for (int64_t h = 0; h < nHeads; ++h) {
+            for (int64_t i = 0; i < seqLen; ++i) {
+                int64_t pRow = (h * seqLen + i) * seqLen;
+                float maxS = -1e9f;
+
+                for (int64_t j = 0; j <= i; ++j) {
+                    float dot = 0.0f;
+                    int64_t qOff = i * dim + h * headDim;
+                    int64_t kOff = j * dim + h * headDim;
+                    for (int64_t d = 0; d < headDim; ++d) {
+                        dot += qD[qOff + d] * kD[kOff + d];
+                    }
+                    float s = dot * scale;
+                    pD[pRow + j] = s;
+                    if (s > maxS) maxS = s;
+                }
+
+                float sumExp = 0.0f;
+                for (int64_t j = 0; j <= i; ++j) {
+                    float expVal = std::exp(pD[pRow + j] - maxS);
+                    pD[pRow + j] = expVal;
+                    sumExp += expVal;
+                }
+                float invSum = sumExp > 0.0f ? (1.0f / sumExp) : 0.0f;
+                for (int64_t j = 0; j <= i; ++j) {
+                    pD[pRow + j] *= invSum;
+                }
+
+                int64_t ctxOff = i * dim + h * headDim;
+                for (int64_t j = 0; j <= i; ++j) {
+                    float weight = pD[pRow + j];
+                    int64_t vOff = j * dim + h * headDim;
+                    for (int64_t d = 0; d < headDim; ++d) {
+                        ctxD[ctxOff + d] += weight * vD[vOff + d];
+                    }
+                }
+            }
+        }
+
+        // Out projection & residual 1
+        la.attnOut = Tensor(Shape({seqLen, dim}));
+        AutogradOps::matmulForward(la.attnContext, lp.wOut.value, la.attnOut);
+
+        la.x1 = Tensor(Shape({seqLen, dim}));
+        Tensor::vecAdd(x, la.attnOut, la.x1);
+
+        // FFN pre-norm
+        la.xNormFfn = Tensor(Shape({seqLen, dim}));
+        la.invRmsFfn = Tensor(Shape({seqLen}));
+        AutogradOps::rmsnormForward(la.x1, lp.ffnNorm.value, la.xNormFfn, la.invRmsFfn, config.normEps);
+
+        // SwiGLU
+        la.ffnGate = Tensor(Shape({seqLen, static_cast<int64_t>(config.intermediateDim)}));
+        la.ffnUp = Tensor(Shape({seqLen, static_cast<int64_t>(config.intermediateDim)}));
+        AutogradOps::matmulForward(la.xNormFfn, lp.wGate.value, la.ffnGate);
+        AutogradOps::matmulForward(la.xNormFfn, lp.wUp.value, la.ffnUp);
+
+        la.ffnSilu = Tensor(Shape({seqLen, static_cast<int64_t>(config.intermediateDim)}));
+        AutogradOps::siluForward(la.ffnGate, la.ffnSilu);
+
+        la.ffnHidden = Tensor(Shape({seqLen, static_cast<int64_t>(config.intermediateDim)}));
+        Tensor::vecMul(la.ffnSilu, la.ffnUp, la.ffnHidden);
+
+        la.ffnOut = Tensor(Shape({seqLen, dim}));
+        AutogradOps::matmulForward(la.ffnHidden, lp.wDown.value, la.ffnOut);
+
+        la.x2 = Tensor(Shape({seqLen, dim}));
+        Tensor::vecAdd(la.x1, la.ffnOut, la.x2);
+
+        x = la.x2;
+    }
+
+    // Final RMSNorm
+    act.finalNormOut = Tensor(Shape({seqLen, dim}));
+    act.finalInvRms = Tensor(Shape({seqLen}));
+    AutogradOps::rmsnormForward(x, finalNorm.value, act.finalNormOut, act.finalInvRms, config.normEps);
+
+    // LM Head
+    act.logits = Tensor(Shape({seqLen, vocab}));
+    AutogradOps::matmulForward(act.finalNormOut, wHead.value, act.logits);
+
+    // ------------------------------------------------------------------------
+    // LOSS CALCULATION & INITIAL BACKWARD GRADIENT
+    // ------------------------------------------------------------------------
+    Tensor gradLogits(Shape({seqLen, vocab}));
+    act.probs = Tensor(Shape({seqLen, vocab}));
+    float loss = AutogradOps::crossEntropyForwardAndBackward(act.logits, targetTokens, gradLogits, act.probs, ignoreIndex);
+
+    // ------------------------------------------------------------------------
+    // BACKPROPAGATION THROUGH ALL TRANSFORMER LAYERS
+    // ------------------------------------------------------------------------
+    // 1. Through LM Head:
+    // gradFinalNormOut = gradLogits * wHead^T
+    // gradWHead += act.finalNormOut^T * gradLogits
+    Tensor gradFinalNormOut(Shape({seqLen, dim}));
+    AutogradOps::matmulBackward(act.finalNormOut, wHead.value, gradLogits, &gradFinalNormOut, &wHead.grad, false, true);
+
+    // 2. Through Final RMSNorm:
+    Tensor dx(Shape({seqLen, dim}));
+    const Tensor& lastX = config.nLayers > 0 ? act.layers[config.nLayers - 1].x2 : act.initialX;
+    AutogradOps::rmsnormBackward(lastX, finalNorm.value, act.finalInvRms, gradFinalNormOut, &dx, &finalNorm.grad, true);
+
+    // 3. Through Layers in reverse order
+    for (int32_t l = static_cast<int32_t>(config.nLayers) - 1; l >= 0; --l) {
+        LayerParams& lp = layers[l];
+        LayerActivations& la = act.layers[l];
+
+        // Residual 2: x2 = x1 + ffnOut
+        // dx1 = dx, dFfnOut = dx
+        Tensor dFfnOut = dx;
+        Tensor dx1(Shape({seqLen, dim}));
+        std::memcpy(dx1.dataFloat(), dx.dataFloat(), seqLen * dim * sizeof(float));
+
+        // ffnOut = ffnHidden * wDown
+        Tensor dFfnHidden(Shape({seqLen, static_cast<int64_t>(config.intermediateDim)}));
+        AutogradOps::matmulBackward(la.ffnHidden, lp.wDown.value, dFfnOut, &dFfnHidden, &lp.wDown.grad, false, true);
+
+        // ffnHidden = ffnSilu * ffnUp
+        Tensor dFfnSilu(Shape({seqLen, static_cast<int64_t>(config.intermediateDim)}));
+        Tensor dFfnUp(Shape({seqLen, static_cast<int64_t>(config.intermediateDim)}));
+        AutogradOps::elemwiseMulBackward(la.ffnSilu, la.ffnUp, dFfnHidden, &dFfnSilu, &dFfnUp, false);
+
+        // Up projection: ffnUp = xNormFfn * wUp
+        Tensor dxNormFfn(Shape({seqLen, dim}));
+        AutogradOps::matmulBackward(la.xNormFfn, lp.wUp.value, dFfnUp, &dxNormFfn, &lp.wUp.grad, false, true);
+
+        // Gate projection: ffnSilu = SiLU(ffnGate)
+        Tensor dFfnGate(Shape({seqLen, static_cast<int64_t>(config.intermediateDim)}));
+        AutogradOps::siluBackward(la.ffnGate, dFfnSilu, dFfnGate, false);
+
+        // Gate matmul: ffnGate = xNormFfn * wGate
+        AutogradOps::matmulBackward(la.xNormFfn, lp.wGate.value, dFfnGate, &dxNormFfn, &lp.wGate.grad, true, true);
+
+        // FFN RMSNorm: xNormFfn = RMSNorm(x1, ffnNorm)
+        Tensor dx1FromFfn(Shape({seqLen, dim}));
+        AutogradOps::rmsnormBackward(la.x1, lp.ffnNorm.value, la.invRmsFfn, dxNormFfn, &dx1FromFfn, &lp.ffnNorm.grad, true);
+        Tensor::vecAdd(dx1, dx1FromFfn, dx1);
+
+        // Residual 1: x1 = xPrev + attnOut
+        // dxPrev = dx1, dAttnOut = dx1
+        Tensor dxPrev(Shape({seqLen, dim}));
+        std::memcpy(dxPrev.dataFloat(), dx1.dataFloat(), seqLen * dim * sizeof(float));
+        Tensor dAttnOut = dx1;
+
+        // attnOut = attnContext * wOut
+        Tensor dAttnContext(Shape({seqLen, dim}));
+        AutogradOps::matmulBackward(la.attnContext, lp.wOut.value, dAttnOut, &dAttnContext, &lp.wOut.grad, false, true);
+
+        // Attention softmax & context backward
+        Tensor dQ(Shape({seqLen, dim}));
+        Tensor dK(Shape({seqLen, dim}));
+        Tensor dV(Shape({seqLen, dim}));
+        dQ.fillZero();
+        dK.fillZero();
+        dV.fillZero();
+
+        const float* dCtx = dAttnContext.dataFloat();
+        const float* pD = la.attnProbs.dataFloat();
+        const float* qD = la.q.dataFloat();
+        const float* kD = la.k.dataFloat();
+        const float* vD = la.v.dataFloat();
+        float* dqD = dQ.dataFloat();
+        float* dkD = dK.dataFloat();
+        float* dvD = dV.dataFloat();
+
+        for (int64_t h = 0; h < nHeads; ++h) {
+            for (int64_t i = 0; i < seqLen; ++i) {
+                int64_t pRow = (h * seqLen + i) * seqLen;
+                int64_t ctxOff = i * dim + h * headDim;
+
+                // 1. dV[j] += probs[j] * dCtx[i]
+                // and compute dProbs[j] = dCtx[i] . v[j]
+                std::vector<float> dProbs(i + 1, 0.0f);
+                for (int64_t j = 0; j <= i; ++j) {
+                    float weight = pD[pRow + j];
+                    int64_t vOff = j * dim + h * headDim;
+                    float dotCtxV = 0.0f;
+                    for (int64_t d = 0; d < headDim; ++d) {
+                        dvD[vOff + d] += weight * dCtx[ctxOff + d];
+                        dotCtxV += dCtx[ctxOff + d] * vD[vOff + d];
+                    }
+                    dProbs[j] = dotCtxV;
+                }
+
+                // 2. Softmax backward: dScores[j] = probs[j] * (dProbs[j] - sum_k(dProbs[k] * probs[k]))
+                double sumDProbsProbs = 0.0;
+                for (int64_t j = 0; j <= i; ++j) {
+                    sumDProbsProbs += static_cast<double>(dProbs[j]) * static_cast<double>(pD[pRow + j]);
+                }
+                float sumVal = static_cast<float>(sumDProbsProbs);
+
+                for (int64_t j = 0; j <= i; ++j) {
+                    float dScore = pD[pRow + j] * (dProbs[j] - sumVal);
+                    // score = (q . k) * scale
+                    float dDot = dScore * scale;
+                    int64_t qOff = i * dim + h * headDim;
+                    int64_t kOff = j * dim + h * headDim;
+
+                    for (int64_t d = 0; d < headDim; ++d) {
+                        dqD[qOff + d] += dDot * kD[kOff + d];
+                        dkD[kOff + d] += dDot * qD[qOff + d];
+                    }
+                }
+            }
+        }
+
+        // Q, K, V projections backward to xNormAttn
+        Tensor dxNormAttn(Shape({seqLen, dim}));
+        AutogradOps::matmulBackward(la.xNormAttn, lp.wQ.value, dQ, &dxNormAttn, &lp.wQ.grad, false, true);
+        AutogradOps::matmulBackward(la.xNormAttn, lp.wK.value, dK, &dxNormAttn, &lp.wK.grad, true, true);
+        AutogradOps::matmulBackward(la.xNormAttn, lp.wV.value, dV, &dxNormAttn, &lp.wV.grad, true, true);
+
+        // Attn RMSNorm backward: xNormAttn = RMSNorm(xPrev, attnNorm)
+        const Tensor& prevLayerX = (l > 0) ? act.layers[l - 1].x2 : act.initialX;
+        Tensor dxFromAttn(Shape({seqLen, dim}));
+        AutogradOps::rmsnormBackward(prevLayerX, lp.attnNorm.value, la.invRmsAttn, dxNormAttn, &dxFromAttn, &lp.attnNorm.grad, true);
+        Tensor::vecAdd(dxPrev, dxFromAttn, dx);
+    }
+
+    // 4. Through Initial Embeddings & Positional Embeddings
+    AutogradOps::embeddingBackward(inputTokens, dx, wEmbed.grad);
+
+    float* gPos = wPos.grad.dataFloat();
+    const float* gX = dx.dataFloat();
+    for (int64_t t = 0; t < seqLen; ++t) {
+        for (int64_t d = 0; d < dim; ++d) {
+            gPos[t * dim + d] += gX[t * dim + d];
+        }
+    }
+
+    return loss;
+}
+
+int32_t NexaNanoModel::predictNextToken(const std::vector<int32_t>& inputTokens) {
+    if (inputTokens.empty()) return 0;
+    Tensor logits;
+    forward(inputTokens, logits);
+    int64_t lastRow = inputTokens.size() - 1;
+    const float* lData = logits.dataFloat() + (lastRow * config.vocabSize);
+
+    int32_t bestTok = 0;
+    float maxLogit = lData[0];
+    for (uint32_t v = 1; v < config.vocabSize; ++v) {
+        if (lData[v] > maxLogit) {
+            maxLogit = lData[v];
+            bestTok = static_cast<int32_t>(v);
+        }
+    }
+    return bestTok;
+}
+
+int32_t NexaNanoModel::sampleNextToken(
+    const std::vector<float>& logits,
+    const std::vector<int32_t>& contextTokens,
+    const GenerationConfig& cfg,
+    std::mt19937_64& rng
+) {
+    const size_t vocabSize = logits.size();
+    if (vocabSize == 0) return 0;
+
+    std::vector<float> filtered = logits;
+
+    // 1. Repetition penalty
+    if (cfg.repetitionPenalty > 1.0f) {
+        for (int32_t tok : contextTokens) {
+            if (tok >= 0 && static_cast<size_t>(tok) < vocabSize) {
+                if (filtered[tok] > 0.0f) {
+                    filtered[tok] /= cfg.repetitionPenalty;
+                } else {
+                    filtered[tok] *= cfg.repetitionPenalty;
+                }
+            }
+        }
+    }
+
+    // 2. Greedy if temperature near 0
+    if (cfg.temperature <= 1e-4f) {
+        int32_t best = 0;
+        float maxVal = filtered[0];
+        for (size_t i = 1; i < vocabSize; ++i) {
+            if (filtered[i] > maxVal) {
+                maxVal = filtered[i];
+                best = static_cast<int32_t>(i);
+            }
+        }
+        return best;
+    }
+
+    // 3. Temperature scaling
+    for (size_t i = 0; i < vocabSize; ++i) {
+        filtered[i] /= cfg.temperature;
+    }
+
+    // 4. Stable Softmax
+    float maxL = *std::max_element(filtered.begin(), filtered.end());
+    double sumExp = 0.0;
+    std::vector<float> probs(vocabSize);
+    for (size_t i = 0; i < vocabSize; ++i) {
+        probs[i] = std::exp(filtered[i] - maxL);
+        sumExp += probs[i];
+    }
+    float invSum = sumExp > 0.0 ? static_cast<float>(1.0 / sumExp) : 0.0f;
+    for (size_t i = 0; i < vocabSize; ++i) {
+        probs[i] *= invSum;
+    }
+
+    // 5. Build index-probability pairs for Top-K / Top-P
+    struct ProbIndex {
+        float prob;
+        int32_t index;
+    };
+    std::vector<ProbIndex> candidates(vocabSize);
+    for (size_t i = 0; i < vocabSize; ++i) {
+        candidates[i] = {probs[i], static_cast<int32_t>(i)};
+    }
+    std::sort(candidates.begin(), candidates.end(), [](const ProbIndex& a, const ProbIndex& b) {
+        return a.prob > b.prob;
+    });
+
+    // 6. Top-K truncation
+    if (cfg.topK > 0 && static_cast<size_t>(cfg.topK) < candidates.size()) {
+        candidates.resize(cfg.topK);
+    }
+
+    // 7. Top-P (Nucleus) truncation
+    if (cfg.topP > 0.0f && cfg.topP < 1.0f) {
+        double cumSum = 0.0;
+        size_t cutoff = candidates.size();
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            cumSum += candidates[i].prob;
+            if (cumSum >= cfg.topP && i > 0) {
+                cutoff = i + 1;
+                break;
+            }
+        }
+        if (cutoff < candidates.size()) {
+            candidates.resize(cutoff);
+        }
+    }
+
+    // Re-normalize probabilities of remaining candidates
+    double totalProb = 0.0;
+    for (const auto& c : candidates) {
+        totalProb += c.prob;
+    }
+    if (totalProb <= 0.0) {
+        return candidates[0].index;
+    }
+
+    std::uniform_real_distribution<double> dist(0.0, totalProb);
+    double r = dist(rng);
+    double accum = 0.0;
+    for (const auto& c : candidates) {
+        accum += c.prob;
+        if (accum >= r) {
+            return c.index;
+        }
+    }
+
+    return candidates.back().index;
+}
+
+GenerationResult NexaNanoModel::generateText(
+    const std::string& prompt,
+    Tokenizer& tokenizer,
+    const GenerationConfig& genCfg
+) {
+    GenerationResult res;
+    res.prompt = prompt;
+    auto start = std::chrono::high_resolution_clock::now();
+
+    // 1. Encode prompt
+    std::vector<int32_t> currentTokens = tokenizer.encode(prompt, true, false);
+    if (currentTokens.empty()) {
+        currentTokens.push_back(tokenizer.specialTokens().bosId);
+    }
+    res.promptTokens = currentTokens;
+
+    std::mt19937_64 rng(genCfg.seed);
+    res.finishReason = "length";
+
+    Tensor logits;
+    for (uint32_t step = 0; step < genCfg.maxNewTokens; ++step) {
+        // Enforce context window bounds
+        std::vector<int32_t> windowTokens = currentTokens;
+        if (windowTokens.size() > config.maxSeqLen) {
+            windowTokens.erase(windowTokens.begin(), windowTokens.begin() + (windowTokens.size() - config.maxSeqLen));
+        }
+
+        // Forward pass
+        forward(windowTokens, logits);
+
+        int64_t lastRow = windowTokens.size() - 1;
+        const float* lData = logits.dataFloat() + (lastRow * config.vocabSize);
+        std::vector<float> lastLogits(lData, lData + config.vocabSize);
+
+        // Sample next token
+        int32_t nextTok = sampleNextToken(lastLogits, currentTokens, genCfg, rng);
+
+        // Check stop token
+        if (genCfg.stopToken >= 0 && nextTok == genCfg.stopToken) {
+            res.finishReason = "stop_token";
+            break;
+        }
+        if (nextTok == tokenizer.specialTokens().eosId) {
+            res.finishReason = "stop_token";
+            break;
+        }
+
+        currentTokens.push_back(nextTok);
+        res.generatedTokens.push_back(nextTok);
+
+        // Check stop sequences
+        if (!genCfg.stopSequences.empty()) {
+            std::string currentDecoded = tokenizer.decode(res.generatedTokens, true);
+            size_t earliestPos = std::string::npos;
+            for (const auto& stopSeq : genCfg.stopSequences) {
+                if (!stopSeq.empty()) {
+                    size_t pos = currentDecoded.find(stopSeq);
+                    if (pos != std::string::npos && (earliestPos == std::string::npos || pos < earliestPos)) {
+                        earliestPos = pos;
+                    }
+                }
+            }
+            if (earliestPos != std::string::npos) {
+                res.finishReason = "stop_sequence";
+                res.generatedText = currentDecoded.substr(0, earliestPos);
+                break;
+            }
+        }
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+    res.durationMs = std::chrono::duration<double, std::milli>(end - start).count();
+    res.tokensGenerated = static_cast<uint32_t>(res.generatedTokens.size());
+    res.tokensPerSecond = res.durationMs > 0.0 ? (res.tokensGenerated / (res.durationMs / 1000.0)) : 0.0;
+
+    if (res.finishReason != "stop_sequence") {
+        res.generatedText = tokenizer.decode(res.generatedTokens, true);
+    }
+    res.fullText = prompt + res.generatedText;
+    res.success = true;
+
+    return res;
+}
+
+bool NexaNanoModel::saveCheckpoint(
+    const std::string& filePath,
+    uint64_t step,
+    float loss,
+    const AdamW* opt
+) const {
+    std::ofstream out(filePath, std::ios::binary);
+    if (!out.is_open()) return false;
+
+    // Header (128 bytes fixed)
+    uint32_t magic = 0x4E455841; // 'NEXA'
+    uint32_t version = 2;         // Format version 2: includes training checkpoint state
+    uint32_t archType = 1;        // Transformer Decoder
+    uint32_t hasOpt = (opt != nullptr) ? 1 : 0;
+    uint32_t nTensors = static_cast<uint32_t>(allParams.size());
+
+    out.write(reinterpret_cast<const char*>(&magic), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&version), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&archType), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&config.vocabSize), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&config.dim), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&config.intermediateDim), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&config.nLayers), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&config.nHeads), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&config.nHeads), sizeof(uint32_t)); // nKvHeads
+    out.write(reinterpret_cast<const char*>(&config.maxSeqLen), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&config.normEps), sizeof(float));
+    float dummyTheta = 10000.0f;
+    out.write(reinterpret_cast<const char*>(&dummyTheta), sizeof(float));
+    uint32_t quantType = 0; // FP32
+    out.write(reinterpret_cast<const char*>(&quantType), sizeof(uint32_t));
+    out.write(reinterpret_cast<const char*>(&nTensors), sizeof(uint32_t));
+
+    // Training checkpoint extension fields:
+    out.write(reinterpret_cast<const char*>(&step), sizeof(uint64_t));
+    out.write(reinterpret_cast<const char*>(&loss), sizeof(float));
+    out.write(reinterpret_cast<const char*>(&hasOpt), sizeof(uint32_t));
+
+    // Pad header to exactly 128 bytes
+    char pad[56] = {0};
+    out.write(pad, sizeof(pad));
+
+    // Write parameter tensors
+    for (const auto* p : allParams) {
+        uint32_t nameLen = static_cast<uint32_t>(p->name.size());
+        out.write(reinterpret_cast<const char*>(&nameLen), sizeof(uint32_t));
+        out.write(p->name.data(), nameLen);
+
+        uint32_t rank = static_cast<uint32_t>(p->value.rank());
+        out.write(reinterpret_cast<const char*>(&rank), sizeof(uint32_t));
+        for (size_t r = 0; r < rank; ++r) {
+            int64_t d = p->value.shape()[r];
+            out.write(reinterpret_cast<const char*>(&d), sizeof(int64_t));
+        }
+
+        int64_t numel = p->value.numel();
+        out.write(reinterpret_cast<const char*>(&numel), sizeof(int64_t));
+        out.write(reinterpret_cast<const char*>(p->value.dataFloat()), numel * sizeof(float));
+    }
+
+    // Optional optimizer state
+    if (opt && hasOpt) {
+        opt->saveState(out);
+    }
+
+    return true;
+}
+
+CheckpointValidationResult NexaNanoModel::validateCheckpoint(const std::string& filePath) {
+    CheckpointValidationResult res;
+    std::ifstream in(filePath, std::ios::binary);
+    if (!in.is_open()) {
+        res.valid = false;
+        res.error = "Failed to open checkpoint file: " + filePath;
+        return res;
+    }
+
+    in.seekg(0, std::ios::end);
+    std::streamsize fileSize = in.tellg();
+    in.seekg(0, std::ios::beg);
+
+    if (fileSize < 128) {
+        res.valid = false;
+        res.error = "File is too small for .nexa header (less than 128 bytes)";
+        return res;
+    }
+
+    uint32_t magic = 0, version = 0, archType = 0;
+    in.read(reinterpret_cast<char*>(&magic), sizeof(uint32_t));
+    in.read(reinterpret_cast<char*>(&version), sizeof(uint32_t));
+    in.read(reinterpret_cast<char*>(&archType), sizeof(uint32_t));
+
+    if (magic != 0x4E455841) {
+        res.valid = false;
+        res.error = "Invalid magic bytes: expected 0x4E455841 ('NEXA')";
+        return res;
+    }
+
+    if (version != 1 && version != 2) {
+        res.valid = false;
+        res.error = "Unsupported format version: " + std::to_string(version);
+        return res;
+    }
+
+    res.version = version;
+    res.archType = archType;
+
+    in.read(reinterpret_cast<char*>(&res.config.vocabSize), sizeof(uint32_t));
+    in.read(reinterpret_cast<char*>(&res.config.dim), sizeof(uint32_t));
+    in.read(reinterpret_cast<char*>(&res.config.intermediateDim), sizeof(uint32_t));
+    in.read(reinterpret_cast<char*>(&res.config.nLayers), sizeof(uint32_t));
+    in.read(reinterpret_cast<char*>(&res.config.nHeads), sizeof(uint32_t));
+    uint32_t dummyKv = 0;
+    in.read(reinterpret_cast<char*>(&dummyKv), sizeof(uint32_t));
+    in.read(reinterpret_cast<char*>(&res.config.maxSeqLen), sizeof(uint32_t));
+    in.read(reinterpret_cast<char*>(&res.config.normEps), sizeof(float));
+    float dummyTheta = 0.0f;
+    in.read(reinterpret_cast<char*>(&dummyTheta), sizeof(float));
+    uint32_t quantType = 0, nTensors = 0;
+    in.read(reinterpret_cast<char*>(&quantType), sizeof(uint32_t));
+    in.read(reinterpret_cast<char*>(&nTensors), sizeof(uint32_t));
+    res.tensorCount = nTensors;
+
+    if (version >= 2) {
+        uint32_t hasOpt = 0;
+        in.read(reinterpret_cast<char*>(&res.step), sizeof(uint64_t));
+        in.read(reinterpret_cast<char*>(&res.loss), sizeof(float));
+        in.read(reinterpret_cast<char*>(&hasOpt), sizeof(uint32_t));
+        res.hasOptimizerState = (hasOpt != 0);
+    }
+
+    in.seekg(128, std::ios::beg);
+
+    uint64_t weightBytes = 0;
+    for (uint32_t t = 0; t < nTensors; ++t) {
+        if (in.eof() || in.fail()) {
+            res.valid = false;
+            res.error = "Corrupted checkpoint: unexpected EOF reading tensor " + std::to_string(t);
+            return res;
+        }
+        uint32_t nameLen = 0;
+        in.read(reinterpret_cast<char*>(&nameLen), sizeof(uint32_t));
+        if (nameLen > 256) {
+            res.valid = false;
+            res.error = "Corrupted tensor name length: " + std::to_string(nameLen);
+            return res;
+        }
+        std::string name(nameLen, '\0');
+        in.read(&name[0], nameLen);
+
+        uint32_t rank = 0;
+        in.read(reinterpret_cast<char*>(&rank), sizeof(uint32_t));
+        if (rank > 4) {
+            res.valid = false;
+            res.error = "Invalid tensor rank: " + std::to_string(rank);
+            return res;
+        }
+        for (uint32_t r = 0; r < rank; ++r) {
+            int64_t d = 0;
+            in.read(reinterpret_cast<char*>(&d), sizeof(int64_t));
+        }
+
+        int64_t numel = 0;
+        in.read(reinterpret_cast<char*>(&numel), sizeof(int64_t));
+        if (numel < 0 || numel > 100000000LL) {
+            res.valid = false;
+            res.error = "Invalid numel in tensor " + name + ": " + std::to_string(numel);
+            return res;
+        }
+        weightBytes += numel * sizeof(float);
+        in.seekg(numel * sizeof(float), std::ios::cur);
+    }
+
+    res.totalWeightBytes = weightBytes;
+    res.valid = true;
+    return res;
+}
+
+bool NexaNanoModel::loadCheckpoint(
+    const std::string& filePath,
+    uint64_t* outStep,
+    float* outLoss,
+    AdamW* opt,
+    std::string* outError
+) {
+    auto val = validateCheckpoint(filePath);
+    if (!val.valid) {
+        if (outError) *outError = val.error;
+        return false;
+    }
+
+    // Architecture compatibility check
+    if (val.config.vocabSize != config.vocabSize) {
+        std::string err = "Vocabulary mismatch: checkpoint has " + std::to_string(val.config.vocabSize) +
+                          ", model has " + std::to_string(config.vocabSize);
+        if (outError) *outError = err;
+        return false;
+    }
+    if (val.config.dim != config.dim) {
+        std::string err = "Hidden dim mismatch: checkpoint has " + std::to_string(val.config.dim) +
+                          ", model has " + std::to_string(config.dim);
+        if (outError) *outError = err;
+        return false;
+    }
+    if (val.config.nLayers != config.nLayers) {
+        std::string err = "Layers mismatch: checkpoint has " + std::to_string(val.config.nLayers) +
+                          ", model has " + std::to_string(config.nLayers);
+        if (outError) *outError = err;
+        return false;
+    }
+
+    std::ifstream in(filePath, std::ios::binary);
+    if (!in.is_open()) {
+        if (outError) *outError = "Failed to open file: " + filePath;
+        return false;
+    }
+
+    if (outStep) *outStep = val.step;
+    if (outLoss) *outLoss = val.loss;
+
+    in.seekg(128, std::ios::beg);
+    uint32_t loadedParams = 0;
+
+    for (uint32_t t = 0; t < val.tensorCount; ++t) {
+        uint32_t nameLen = 0;
+        in.read(reinterpret_cast<char*>(&nameLen), sizeof(uint32_t));
+        std::string name(nameLen, '\0');
+        in.read(&name[0], nameLen);
+
+        uint32_t rank = 0;
+        in.read(reinterpret_cast<char*>(&rank), sizeof(uint32_t));
+        std::vector<int64_t> dims(rank);
+        for (uint32_t r = 0; r < rank; ++r) {
+            in.read(reinterpret_cast<char*>(&dims[r]), sizeof(int64_t));
+        }
+
+        int64_t numel = 0;
+        in.read(reinterpret_cast<char*>(&numel), sizeof(int64_t));
+
+        // Find parameter in model
+        bool found = false;
+        for (auto* p : allParams) {
+            if (p->name == name) {
+                if (p->value.numel() != numel) {
+                    if (outError) *outError = "Tensor dimension mismatch for " + name;
+                    return false;
+                }
+                in.read(reinterpret_cast<char*>(p->value.dataFloat()), numel * sizeof(float));
+                if (in.fail()) {
+                    if (outError) *outError = "Failed reading tensor bytes for " + name;
+                    return false;
+                }
+                found = true;
+                loadedParams++;
+                break;
+            }
+        }
+        if (!found) {
+            in.seekg(numel * sizeof(float), std::ios::cur);
+        }
+    }
+
+    if (loadedParams != allParams.size()) {
+        if (outError) *outError = "Incomplete checkpoint: loaded " + std::to_string(loadedParams) +
+                                  " of " + std::to_string(allParams.size()) + " required tensors";
+        return false;
+    }
+
+    if (opt && val.hasOptimizerState && in.good()) {
+        opt->loadState(in);
+    }
+
+    return true;
+}
+
+} // namespace nexa

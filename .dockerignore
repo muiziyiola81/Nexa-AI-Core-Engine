@@ -1,0 +1,30 @@
+node_modules/
+dist/
+dist-server/
+native/build/
+.git/
+.gitignore
+.env
+.env.*
+!.env.example
+*.log
+coverage/
+
+# Exclude local scratch/test state and dev API keys from production images
+data/api_keys.json
+data/models_registry.json
+data/test_models/
+data/experiments/
+data/p35_*.json
+data/phase35_*.json
+
+# Trim redundant intermediate training checkpoints to keep Cloud Run image lean (~15MB weights kept)
+data/checkpoints/*test*.nexa
+data/checkpoints/*_final.nexa
+data/checkpoints/nexa_nano_step_30.nexa
+data/checkpoints/nexa_nano_corpus_step_60.nexa
+data/checkpoints/nexa_nano_qa.nexa
+data/checkpoints/nexa_p36_tier1*
+data/checkpoints/nexa_p36_tier2*
+data/checkpoints/nexa_p36_tier3_best.nexa
+data/checkpoints/nexa_phase35_nano*

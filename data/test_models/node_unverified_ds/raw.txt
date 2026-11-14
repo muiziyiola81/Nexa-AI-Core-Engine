@@ -1,0 +1,5 @@
+User: What is a queue?
+Assistant: A queue processes elements in first-in first-out order.
+
+User: What is a stack?
+Assistant: A stack stores elements in last-in first-out order.

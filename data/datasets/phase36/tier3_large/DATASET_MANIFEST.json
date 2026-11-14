@@ -1,0 +1,8 @@
+{
+  "name": "nexa-phase36-tier3-large",
+  "version": "3.6-tier3-1.0.0",
+  "source": "Original NEXA Project Phase 3.6 Authored Corpus (Tier 3 Large)",
+  "license": "MIT",
+  "externalDownloads": false,
+  "unseenTestFile": "data/datasets/phase36/unseen_test_expanded.txt"
+}

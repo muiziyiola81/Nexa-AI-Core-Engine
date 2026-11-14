@@ -1,0 +1,6 @@
+{
+  "name": "NEXA AI Core Engine",
+  "description": "Independent self-hosted AI inference infrastructure and model-serving layer with OpenAI-compatible API and llama.cpp runtime adapter.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

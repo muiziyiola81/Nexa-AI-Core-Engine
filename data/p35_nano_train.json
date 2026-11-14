@@ -1,0 +1,39 @@
+
+================================================================
+     NEXA-1 NANO ADVANCED MULTI-BATCH TRAINING PIPELINE          
+================================================================
+Model: 184640 params | Vocab: 768 | Dim: 64 | Layers: 2 | Heads: 2 | Ctx: 64
+Dataset: 5 files, 12553 tokens, 178 examples (0 duplicates pruned)
+Train seqs: 251 | Val seqs: 50 | Prompt-masked targets: 3114 | Unmasked: 13197
+Batch Size: 2 | Grad Accum: 2 | Effective Batch: 4 | Seed: 42
+Initial Val Loss: 7.16477 | Initial PPL: 1293.06
+----------------------------------------------------------------
+  Step |         LR |  Train Loss |    Val Loss |    Val PPL |  Grad Norm
+----------------------------------------------------------------
+     1 |   4.20e-04 |      7.2554 |      7.1472 |    1270.54 |    10.8722 [BEST]
+    15 |   2.50e-03 |      6.4134 |      6.3483 |     571.49 |     2.1442 [BEST]
+    30 |   2.43e-03 |      5.8000 |      5.9528 |     384.83 |     1.0027 [BEST]
+    45 |   2.22e-03 |      5.6944 |      5.8110 |     333.96 |     1.1699 [BEST]
+    60 |   1.90e-03 |      5.8213 |      5.7089 |     301.53 |     1.5400 [BEST]
+    75 |   1.51e-03 |      5.5440 |      5.6984 |     298.39 |     1.7588 [BEST]
+    90 |   1.09e-03 |      5.4492 |      5.6527 |     285.05 |     1.8241 [BEST]
+   105 |   7.00e-04 |      5.1360 |      5.6172 |     275.13 |     2.1035 [BEST]
+   120 |   3.81e-04 |      5.3576 |      5.6052 |     271.82 |     2.4413 [BEST]
+   135 |   1.72e-04 |      5.1607 |      5.6078 |     272.56 |     1.9805
+   150 |   1.00e-04 |      5.1434 |      5.6113 |     273.50 |     2.3959
+----------------------------------------------------------------
+ADVANCED TRAINING SUMMARY:
+  Train Loss:       7.2554 -> 5.1434
+  Val Loss:         7.1648 -> 5.6113 (Best: 5.6052 @ step 120)
+  Val Perplexity:   1293.0607 -> 273.4976 (Best: 271.8238)
+  Throughput:       5839.1 tok/s | Peak RSS: 10.95 MB
+  Overfit Detected: NO
+  Weight Delta:     14.40 (Weights updated: YES)
+  Sample Output:    "User: What is a CPU?
+Assistant: A of bledcbings, and is a c antent.
+"
+  Final Checkpoint: data/checkpoints/nexa_phase35_nano_best_final.nexa
+  Best Checkpoint:  data/checkpoints/nexa_phase35_nano_best.nexa
+================================================================
+
+{"status":"ok","total_parameters":184640,"vocab_size":768,"dim":64,"layers":2,"heads":2,"seq_len":64,"examples":178,"total_tokens":12553,"masked_target_tokens":3114,"unmasked_target_tokens":13197,"total_steps":150,"initial_train_loss":7.26,"final_train_loss":5.14,"initial_val_loss":7.16,"final_val_loss":5.61,"best_val_loss":5.61,"best_checkpoint_step":120,"best_perplexity":271.82,"overfitting_detected":false,"tokens_per_sec":5839.15,"peak_rss_mb":10.95,"duration_s":5.58,"best_checkpoint_path":"data/checkpoints/nexa_phase35_nano_best.nexa","tokenizer_path":"data/tokenizers/nexa_bpe_phase35.nbt","sample_generation":"User: What is a CPU?\nAssistant: A of bledcbings, and is a c antent.\n"}

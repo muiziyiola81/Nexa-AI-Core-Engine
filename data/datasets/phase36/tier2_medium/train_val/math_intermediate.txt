@@ -1,0 +1,104 @@
+User: How do you find the greatest common divisor of 24 and 36?
+Assistant: Listing factors or applying Euclid's algorithm shows that 12 is the largest integer dividing both 24 and 36 evenly.
+
+User: What is the least common multiple of 6 and 8?
+Assistant: Checking multiples of 8 gives 8, 16, and 24; since 24 is divisible by 6, the least common multiple is 24.
+
+User: Solve for z when 4z + 7 = 31.
+Assistant: Subtract 7 from both sides to obtain 4z = 24, then divide both sides by 4 to get z = 6.
+
+User: What is 15 percent of 200?
+Assistant: Ten percent of 200 is 20 and five percent is 10, so adding them gives 30.
+
+User: How do you compute the slope between points (1, 3) and (5, 11)?
+Assistant: Divide the vertical change 11 minus 3 equals 8 by the horizontal change 5 minus 1 equals 4 to get a slope of 2.
+
+User: What is the Pythagorean theorem formula?
+Assistant: For any right triangle with legs a and b and hypotenuse c, the squared lengths obey a squared plus b squared equals c squared.
+
+User: How do you calculate the circumference of a circle from its diameter?
+Assistant: Multiply the circle's diameter by pi, approximately 3.14159, to find the circumference.
+
+User: What is the volume of a cube whose edges each measure 5 centimeters?
+Assistant: Cubing the side length gives 5 times 5 times 5, which equals 125 cubic centimeters.
+
+User: What is an irrational number?
+Assistant: An irrational number cannot be expressed as a simple fraction of two integers, such as pi or the square root of 2.
+
+User: How do negative exponents behave algebraically?
+Assistant: Raising a nonzero base x to a negative power -n equals the reciprocal 1 divided by x raised to n.
+
+User: Simplify the algebraic expression 3(2x + 4) - 5x.
+Assistant: Distribute 3 to obtain 6x + 12 - 5x, then combine like terms to get x + 12.
+
+User: What is the probability of flipping heads twice in a row on a fair coin?
+Assistant: Multiply the independent probabilities one half times one half to obtain one fourth, or 25 percent.
+
+User: What does mutually exclusive mean in probability?
+Assistant: Two events are mutually exclusive if they cannot happen at the same time, meaning their intersection probability is zero.
+
+User: How do you find the mode of a list of numbers?
+Assistant: Count how many times each value appears; the mode is the value occurring most frequently.
+
+User: What is the range of a numerical dataset?
+Assistant: The range equals the largest observed value minus the smallest observed value.
+
+User: How do you transpose a matrix?
+Assistant: Swap the matrix's rows and columns so the entry at row i, column j moves to row j, column i.
+
+User: What is a unit vector?
+Assistant: A unit vector is a vector scaled so its Euclidean length or magnitude equals exactly 1.
+
+User: How is the Euclidean norm of a vector computed?
+Assistant: Square every component, sum all squared terms, and take the positive square root of the total.
+
+User: What does an integral represent geometrically under a positive curve?
+Assistant: The definite integral calculates the net signed area bounded between the function's curve and the horizontal axis across an interval.
+
+User: What is the derivative of x squared with respect to x?
+Assistant: By the power rule, bringing down the exponent 2 gives a derivative of 2x.
+
+User: Why is the derivative of any constant function equal to zero?
+Assistant: A constant function never changes value as x varies, so its instantaneous rate of change is zero everywhere.
+
+User: What does linear independence mean for two vectors?
+Assistant: Two nonzero vectors are linearly independent when neither vector can be written as a scalar multiple of the other.
+
+User: How many combinations of 2 items can be chosen from 5 distinct items?
+Assistant: Using n choose k gives 5 times 4 divided by 2, which equals 10 distinct pairs.
+
+User: Convert the binary number 1011 into base ten decimal.
+Assistant: Adding place values 8 + 0 + 2 + 1 gives 11 in decimal.
+
+User: Convert the decimal number 19 into binary representation.
+Assistant: Writing 19 as powers of two 16 + 2 + 1 produces the binary string 10011.
+
+User: What is an inequality in algebra?
+Assistant: An inequality compares two expressions using symbols such as less than, greater than, or equal bounds rather than strict equality.
+
+User: How does compound interest differ from simple interest?
+Assistant: Compound interest adds earned interest back into the principal each period so subsequent interest grows on a larger total.
+
+User: What is a quadratic equation?
+Assistant: A quadratic equation is a polynomial equation of degree two written in standard form as ax squared plus bx plus c equals zero.
+
+User: How many real roots can a quadratic equation have?
+Assistant: Depending on whether the discriminant b squared minus 4ac is positive, zero, or negative, a quadratic has two, one, or zero real roots.
+
+User: Why is dividing by zero undefined in arithmetic?
+Assistant: No finite number multiplied by zero can recover a nonzero dividend, and zero times anything equals zero, making division ambiguous.
+
+User: Compute 7 multiplied by 8 minus 6.
+Assistant: Multiplication precedes subtraction, so 7 times 8 equals 56, and subtracting 6 leaves 50.
+
+User: What is a prime factor tree used for?
+Assistant: A factor tree splits a composite integer step by step into smaller factors until only prime numbers remain at the leaves.
+
+User: How do you convert a percentage into a decimal?
+Assistant: Divide the percentage by 100, which moves the decimal point two places to the left.
+
+User: What is a polygon?
+Assistant: A polygon is a closed two-dimensional geometric shape formed by joining three or more straight line segments end to end.
+
+User: How many sides does a regular hexagon have?
+Assistant: A hexagon has six straight sides and six vertices.

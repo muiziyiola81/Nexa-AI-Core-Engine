@@ -1,0 +1,119 @@
+User: How does CPU pipelining improve instruction throughput?
+Assistant: Pipelining overlaps fetch, decode, execute, and write-back stages across consecutive instructions so multiple instructions advance simultaneously each clock cycle.
+
+User: What is branch prediction in modern processors?
+Assistant: Branch prediction guesses whether conditional jumps will be taken so the CPU keeps its instruction pipeline full instead of stalling.
+
+User: Why does memory alignment matter for fast CPU vector instructions?
+Assistant: Aligned addresses fit neatly inside cache lines and SIMD registers, avoiding split memory reads and extra hardware cycles.
+
+User: What is SIMD vectorization?
+Assistant: Single Instruction, Multiple Data applies one arithmetic operation across multiple packed floating-point or integer lanes inside wide registers simultaneously.
+
+User: How does stack memory allocation differ from heap allocation in C++?
+Assistant: Stack variables live strictly within a function call frame with automatic cleanup, while heap memory persists dynamically until explicitly freed or smart-pointed.
+
+User: What is RAII in C++ programming?
+Assistant: Resource Acquisition Is Initialization binds memory, file handles, or mutex lifetimes to object constructors and destructors so cleanup happens automatically.
+
+User: Why prefer std::unique_ptr over raw owning pointers in modern C++?
+Assistant: Smart pointers encode sole ownership clearly and automatically free heap objects when scopes exit or exceptions unwind, preventing memory leaks.
+
+User: What does const correctness guarantee in C++ APIs?
+Assistant: Marking parameters and methods const tells both the compiler and callers which objects are read-only and cannot be mutated accidentally.
+
+User: How does a B-tree suit disk-backed databases better than a standard binary tree?
+Assistant: B-trees pack many keys per node matching disk page sizes, slashing tree depth and minimizing slow storage reads during searches.
+
+User: What is Dijkstra's shortest path algorithm used for?
+Assistant: Dijkstra's algorithm computes minimum-cost paths from a starting vertex to all reachable nodes in graphs with nonnegative edge weights.
+
+User: When does quicksort run slower than expected and how is it prevented?
+Assistant: Choosing bad pivots on already-sorted arrays degrades quicksort to quadratic time, which randomized or median-of-three pivots prevent.
+
+User: What is topological sorting of a directed acyclic graph?
+Assistant: Topological sorting orders vertices linearly so every directed dependency edge u to v places u strictly ahead of v.
+
+User: Why use a thread pool instead of spawning thousands of OS threads?
+Assistant: Reusing a bounded pool of worker threads avoids expensive kernel creation overhead and keeps CPU cores saturated without thrashing caches.
+
+User: What is TCP congestion control?
+Assistant: Congestion control probes available network bandwidth cautiously and shrinks the sending window whenever dropped packets signal router saturation.
+
+User: How does UDP differ from TCP?
+Assistant: UDP sends lightweight datagrams without handshakes, ordering, or retransmission guarantees, making it ideal for real-time audio or gaming telemetry.
+
+User: What is a cryptographic hash function?
+Assistant: A cryptographic hash maps arbitrary input bytes into a fixed-length digest so inverting the digest or finding two colliding inputs is computationally infeasible.
+
+User: Why add a unique salt before hashing each user's password?
+Assistant: Random per-user salts prevent attackers from cracking identical passwords or using precomputed rainbow lookup tables across breached databases.
+
+User: What does attention scaling by one over square root of head dimension accomplish?
+Assistant: Dividing dot-product scores by square root of head dimension keeps softmax inputs from growing extreme in variance as width increases.
+
+User: Why do causal language models use SwiGLU or gated feed-forward layers?
+Assistant: Gated linear activations multiply two learned projections elementwise, increasing representational expressiveness per parameter compared to plain single-path MLPs.
+
+User: What is gradient checking with finite differences?
+Assistant: Finite-difference checking perturbs single scalar weights by a tiny epsilon to verify that backpropagated analytical gradients match numerical slopes closely.
+
+User: Why is mixed-precision or quantized inference faster on edge devices?
+Assistant: Smaller numeric representations cut weight memory bandwidth in half or quarters, letting CPUs and NPUs stream parameters through cache much faster.
+
+User: What is token embedding lookup?
+Assistant: Token embedding lookup selects the learned dense feature vector row matching each integer token ID inside an embedding matrix.
+
+User: How do positional encodings help transformers track word order?
+Assistant: Because self-attention treats sets symmetrically, adding position vectors lets each layer distinguish early words from late words in a sequence.
+
+User: Why is top-p nucleus sampling often preferred over raw multinomial sampling?
+Assistant: Top-p sampling trims off the long low-probability tail of irrelevant tokens while dynamically keeping more choices when uncertainty is genuinely high.
+
+User: What does repetition penalty change during decoding?
+Assistant: Repetition penalty divides or lowers logits of tokens that already appeared in context, discouraging looping phrases during text generation.
+
+User: How does greedy decoding behave?
+Assistant: Greedy decoding deterministically chooses the single token with the highest logit at every generation step without random sampling.
+
+User: What happens when sampling temperature approaches zero versus above one?
+Assistant: Lower temperature sharpens logits toward the most probable predictable tokens, whereas higher temperature flattens differences and increases creative randomness.
+
+User: Why is KV caching used during autoregressive transformer inference?
+Assistant: Storing past key and value projections avoids recomputing earlier tokens at every new generated word, turning quadratic work into linear incremental steps.
+
+User: What is an epoch compared to an optimization step?
+Assistant: One step updates weights once after a batch, whereas one epoch completes a full pass across every training example in the dataset.
+
+User: Why should a tokenizer be trained strictly on the training corpus and never on test questions?
+Assistant: Building subword merges using held-out evaluation prompts leaks test vocabulary statistics and invalidates strict generalization claims.
+
+User: What is prompt masking in instruction tuning?
+Assistant: Setting target token labels on user prompts to an ignore index ensures cross-entropy loss optimizes only the assistant's generated answers.
+
+User: How can noisy or contradictory training examples harm a small language model?
+Assistant: Small models have tight capacity, so conflicting facts and garbled sentences waste precious weights and cause incoherent or erratic predictions.
+
+User: What is data contamination in model benchmarks?
+Assistant: Contamination happens when evaluation questions or close paraphrases appear inside training files, making memorization look falsely like reasoning.
+
+User: Why record dataset hashes and experiment configurations in JSON logs?
+Assistant: Tracking exact versions, seeds, hyperparameters, and metrics makes every training result reproducible, auditable, and comparable over time.
+
+User: What does early stopping monitor?
+Assistant: Early stopping halts training after validation loss fails to improve for several checks, returning weights from the best checkpoint before overfitting worsens.
+
+User: How does L2 weight decay differ from L1 regularization?
+Assistant: L2 decay shrinks weights smoothly proportional to magnitude, whereas L1 pushes small weights all the way to exact zero for sparsity.
+
+User: What is a confusion matrix in classification evaluation?
+Assistant: A confusion matrix tabulates true positives, false positives, true negatives, and false negatives to reveal exactly which classes a model confuses.
+
+User: Why measure perplexity alongside training loss?
+Assistant: Perplexity exponentiates cross-entropy loss to express the effective average number of equally likely next-token choices the model feels confused among.
+
+User: How does a build system like CMake simplify cross-platform C++ compilation?
+Assistant: CMake detects compilers, target architectures, and CPU SIMD flags cleanly from one project script and generates native build files automatically.
+
+User: What is the difference between static linking and dynamic linking?
+Assistant: Static linking bundles library code directly inside the executable binary, whereas dynamic linking loads shared system libraries at program startup.

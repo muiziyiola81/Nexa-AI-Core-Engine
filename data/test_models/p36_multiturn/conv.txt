@@ -1,0 +1,9 @@
+User: What is 2 plus 2?
+Assistant: Two plus two equals four.
+User: And what is 4 plus 4?
+Assistant: Four plus four equals eight.
+
+User: What is 3 plus 3?
+Assistant: Three plus three equals six.
+User: And what is 6 plus 6?
+Assistant: Six plus six equals twelve.

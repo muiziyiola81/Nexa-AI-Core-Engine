@@ -1,0 +1,13 @@
+Q: What is the internet?
+A: The internet is a global network of interconnected computers and communications infrastructure operating under standardized protocols like TCP/IP to exchange digital information worldwide.
+
+Question: What is the internet?
+Answer: The internet is a decentralized planetary network that enables electronic devices to route data packets, access distributed servers, and share web resources.
+
+Q: What is mathematics?
+A: Mathematics is the formal abstract science of numbers, quantities, geometrical structures, spaces, algebraic patterns, and logical relationships.
+
+Question: What is mathematics?
+Answer: Mathematics is the fundamental deductive language that underpins science, describing physical reality and computational logic through rigorous definitions, proofs, and formulas.
+
+The internet distributes information globally across fiber optics and radio links. Mathematics provides the foundational linear algebra, probability, and calculus formulas required to train deep learning models like NEXA-1 Nano.

@@ -1,0 +1,119 @@
+User: What is a CPU?
+Assistant: A CPU, or central processing unit, is the primary chip in a computer that fetches instructions from memory, decodes them, and performs arithmetic and logic operations.
+
+User: What is RAM and why is it important?
+Assistant: RAM, or random access memory, is fast temporary memory that stores active programs and data while a computer runs so the CPU can access them quickly.
+
+User: What is the difference between RAM and long-term storage like an SSD?
+Assistant: RAM is much faster than an SSD and holds running data, but RAM loses its contents when power turns off, whereas an SSD keeps files saved without power.
+
+User: What is an operating system?
+Assistant: An operating system is system software that manages hardware resources like CPU time, memory, and storage while providing services for applications.
+
+User: What is the difference between a process and a thread?
+Assistant: A process is an independent running program with its own isolated memory space, while threads are execution units inside a process that share the same memory.
+
+User: What is an algorithm?
+Assistant: An algorithm is a step-by-step finite procedure for solving a problem or performing a calculation.
+
+User: What is a data structure?
+Assistant: A data structure is a way of organizing and storing data in memory—such as an array, linked list, stack, queue, or hash table—so operations are efficient.
+
+User: How does binary search work?
+Assistant: Binary search finds a target value in a sorted list by repeatedly checking the middle element and eliminating half of the remaining range each step.
+
+User: What is the time complexity of binary search?
+Assistant: Binary search runs in O(log n) time because the search space is cut in half on every comparison.
+
+User: What is a hash table?
+Assistant: A hash table stores key-value pairs by using a hash function to map each key to an array bucket, enabling fast average-case lookups in O(1) time.
+
+User: What is the difference between a stack and a queue?
+Assistant: A stack follows last-in, first-out (LIFO) order like a pile of plates, while a queue follows first-in, first-out (FIFO) order like a waiting line.
+
+User: What does a compiler do?
+Assistant: A compiler translates source code written in a high-level language like C++ into machine instructions that a CPU can execute directly.
+
+User: What is the difference between a compiler and an interpreter?
+Assistant: A compiler translates an entire program into machine code before execution, whereas an interpreter reads and executes instructions step by step at runtime.
+
+User: What is source code?
+Assistant: Source code is human-readable program text written in a programming language before it is compiled or interpreted into machine execution.
+
+User: What is a bug in software?
+Assistant: A bug is an error or unintended flaw in a program that causes incorrect results, crashes, or unexpected behavior.
+
+User: What is debugging?
+Assistant: Debugging is the process of reproducing a software error, finding its root cause in code or data, fixing it, and verifying the fix.
+
+User: What is version control?
+Assistant: Version control is a system such as Git that tracks changes to files over time so developers can inspect history, branch safely, and collaborate.
+
+User: What is an API?
+Assistant: An API, or application programming interface, defines the rules, functions, or network endpoints that allow two software components to communicate.
+
+User: What does HTTP stand for and what does it do?
+Assistant: HTTP stands for Hypertext Transfer Protocol; it defines how clients such as web browsers request and receive resources from web servers.
+
+User: What is DNS?
+Assistant: DNS, the Domain Name System, translates human-friendly domain names into numerical IP addresses that network routers use to deliver packets.
+
+User: What is TCP/IP?
+Assistant: TCP/IP is the core suite of networking protocols where IP handles addressing and routing packets while TCP guarantees reliable, ordered delivery.
+
+User: What is a database index?
+Assistant: A database index is an auxiliary lookup structure built on one or more columns so queries can find matching rows without scanning the entire table.
+
+User: What is encryption?
+Assistant: Encryption transforms readable plaintext into unreadable ciphertext using a secret key so only authorized parties can recover the original data.
+
+User: What is the difference between symmetric and asymmetric encryption?
+Assistant: Symmetric encryption uses the same secret key to encrypt and decrypt, whereas asymmetric encryption uses a public key to encrypt and a separate private key to decrypt.
+
+User: What is a neural network?
+Assistant: A neural network is a machine learning model built from layers of connected weights and nonlinear functions that learns patterns from training examples.
+
+User: What is a token in a language model?
+Assistant: A token is a basic unit of text—such as a word, subword piece, or byte—represented by an integer ID that a language model reads and predicts.
+
+User: What is Byte Pair Encoding (BPE)?
+Assistant: Byte Pair Encoding is a tokenization algorithm that starts from individual characters or bytes and repeatedly merges the most frequent adjacent pairs into subword tokens.
+
+User: What is an embedding layer?
+Assistant: An embedding layer is a lookup table that converts each discrete token ID into a dense vector of floating-point numbers capturing learned features.
+
+User: What is self-attention in a Transformer?
+Assistant: Self-attention lets each token in a sequence compare its query vector against keys from earlier tokens to weigh which context values matter most.
+
+User: What is backpropagation?
+Assistant: Backpropagation applies the chain rule of calculus backward through neural network layers to compute how each weight contributed to the training loss.
+
+User: What does the AdamW optimizer do?
+Assistant: AdamW updates neural network weights using adaptive per-parameter first and second gradient moments together with decoupled weight decay regularization.
+
+User: What is overfitting in machine learning?
+Assistant: Overfitting happens when a model memorizes noise or narrow details in the training set and performs worse on unseen validation or test data.
+
+User: Why do we split data into training, validation, and test sets?
+Assistant: Training data fits model weights, validation data tunes hyperparameters and selects the best checkpoint, and a separate test set measures true unseen generalization.
+
+User: What is a CPU cache?
+Assistant: A CPU cache is a tiny, ultra-fast memory pool located near or on the processor chip that holds recently used data to avoid slow main RAM accesses.
+
+User: What is recursion in programming?
+Assistant: Recursion is a technique where a function calls itself on a smaller version of the same problem until reaching a simple base case.
+
+User: What is a memory leak?
+Assistant: A memory leak occurs when a program allocates heap memory and loses track of it without freeing it, causing memory usage to grow unnecessarily.
+
+User: What is floating-point arithmetic?
+Assistant: Floating-point arithmetic represents real numbers approximately using a sign, significand, and exponent so computers can handle very large and very small values.
+
+User: What is a kernel in an operating system?
+Assistant: The kernel is the core privileged component of an operating system that directly controls CPU scheduling, memory allocation, and hardware devices.
+
+User: What does JSON stand for?
+Assistant: JSON stands for JavaScript Object Notation, a lightweight text format using key-value objects and arrays to exchange structured data.
+
+User: Why is UTF-8 widely used?
+Assistant: UTF-8 is a variable-width character encoding compatible with ASCII that can represent every Unicode character while saving space on English text.
