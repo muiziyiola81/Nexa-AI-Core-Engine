@@ -8,6 +8,11 @@
 #include <cstring>
 #include <algorithm>
 #include <iostream>
+#include <thread>
+#include <vector>
+#if defined(__AVX2__) && defined(__FMA__)
+#include <immintrin.h>
+#endif
 
 namespace nexa {
 
@@ -70,6 +75,95 @@ void GradTensor::clipGrad(float scale) {
 // Autograd Operations Forward & Backward
 // ----------------------------------------------------------------------------
 
+namespace {
+
+inline float dotContig(const float* a, const float* b, int64_t len) {
+#if defined(__AVX2__) && defined(__FMA__)
+    __m256 acc = _mm256_setzero_ps();
+    int64_t j = 0;
+    for (; j + 8 <= len; j += 8) {
+        __m256 va = _mm256_loadu_ps(a + j);
+        __m256 vb = _mm256_loadu_ps(b + j);
+        acc = _mm256_fmadd_ps(va, vb, acc);
+    }
+    __m128 hi = _mm256_extractf128_ps(acc, 1);
+    __m128 lo = _mm256_castps256_ps128(acc);
+    __m128 s4 = _mm_add_ps(lo, hi);
+    __m128 s2 = _mm_hadd_ps(s4, s4);
+    __m128 s1 = _mm_hadd_ps(s2, s2);
+    float sum = _mm_cvtss_f32(s1);
+    for (; j < len; ++j) {
+        sum += a[j] * b[j];
+    }
+    return sum;
+#else
+    float sum = 0.0f;
+    for (int64_t j = 0; j < len; ++j) {
+        sum += a[j] * b[j];
+    }
+    return sum;
+#endif
+}
+
+inline void saxpyAccum(int64_t len, float alpha, const float* src, float* dst) {
+#if defined(__AVX2__) && defined(__FMA__)
+    __m256 aVec = _mm256_set1_ps(alpha);
+    int64_t j = 0;
+    for (; j + 8 <= len; j += 8) {
+        __m256 dVec = _mm256_loadu_ps(dst + j);
+        __m256 sVec = _mm256_loadu_ps(src + j);
+        dVec = _mm256_fmadd_ps(aVec, sVec, dVec);
+        _mm256_storeu_ps(dst + j, dVec);
+    }
+    for (; j < len; ++j) {
+        dst[j] += alpha * src[j];
+    }
+#else
+    for (int64_t j = 0; j < len; ++j) {
+        dst[j] += alpha * src[j];
+    }
+#endif
+}
+
+void matmulBackwardARange(
+    const float* gyData,
+    const float* bData,
+    float* gaData,
+    int64_t iBegin,
+    int64_t iEnd,
+    int64_t K,
+    int64_t N
+) {
+    for (int64_t i = iBegin; i < iEnd; ++i) {
+        const float* gyRow = gyData + i * N;
+        float* gaRow = gaData + i * K;
+        for (int64_t k = 0; k < K; ++k) {
+            gaRow[k] += dotContig(gyRow, bData + k * N, N);
+        }
+    }
+}
+
+void matmulBackwardBRange(
+    const float* aData,
+    const float* gyData,
+    float* gbData,
+    int64_t kBegin,
+    int64_t kEnd,
+    int64_t M,
+    int64_t K,
+    int64_t N
+) {
+    for (int64_t i = 0; i < M; ++i) {
+        const float* aRow = aData + i * K;
+        const float* gyRow = gyData + i * N;
+        for (int64_t k = kBegin; k < kEnd; ++k) {
+            saxpyAccum(N, aRow[k], gyRow, gbData + k * N);
+        }
+    }
+}
+
+} // namespace
+
 void AutogradOps::matmulForward(const Tensor& A, const Tensor& B, Tensor& Y) {
     Tensor::matmul(A, B, Y);
 }
@@ -92,70 +186,56 @@ void AutogradOps::matmulBackward(
     const float* bData = B.dataFloat();
     const float* gyData = gradY.dataFloat();
 
+    unsigned int hwThreads = std::thread::hardware_concurrency();
+    int64_t maxThreads = hwThreads > 0 ? static_cast<int64_t>(std::min<unsigned int>(hwThreads, 4)) : 1;
+
     // 1. dA = gradY * B^T -> [M, K]
-    // dA[i, k] = sum_j (gradY[i, j] * B[k, j])
     if (gradA) {
         float* gaData = gradA->dataFloat();
         if (!accumulateA) {
             gradA->fillZero();
         }
-
-        constexpr int64_t BLOCK = 32;
-        for (int64_t ii = 0; ii < M; ii += BLOCK) {
-            int64_t iMax = std::min(M, ii + BLOCK);
-            for (int64_t kk = 0; kk < K; kk += BLOCK) {
-                int64_t kMax = std::min(K, kk + BLOCK);
-                for (int64_t jj = 0; jj < N; jj += BLOCK) {
-                    int64_t jMax = std::min(N, jj + BLOCK);
-
-                    for (int64_t i = ii; i < iMax; ++i) {
-                        const float* gyRow = gyData + (i * N);
-                        float* gaRow = gaData + (i * K);
-
-                        for (int64_t k = kk; k < kMax; ++k) {
-                            const float* bRow = bData + (k * N);
-                            float sum = 0.0f;
-                            for (int64_t j = jj; j < jMax; ++j) {
-                                sum += gyRow[j] * bRow[j];
-                            }
-                            gaRow[k] += sum;
-                        }
-                    }
+        int64_t numThreads = (M >= 4 && (M * K * N) >= 65536 && maxThreads > 1) ? std::min(maxThreads, M) : 1;
+        if (numThreads <= 1) {
+            matmulBackwardARange(gyData, bData, gaData, 0, M, K, N);
+        } else {
+            std::vector<std::thread> workers;
+            workers.reserve(static_cast<size_t>(numThreads - 1));
+            int64_t rowsPerThread = (M + numThreads - 1) / numThreads;
+            for (int64_t t = 1; t < numThreads; ++t) {
+                int64_t rStart = t * rowsPerThread;
+                int64_t rEnd = std::min(M, rStart + rowsPerThread);
+                if (rStart < rEnd) {
+                    workers.emplace_back(matmulBackwardARange, gyData, bData, gaData, rStart, rEnd, K, N);
                 }
             }
+            matmulBackwardARange(gyData, bData, gaData, 0, std::min(M, rowsPerThread), K, N);
+            for (auto& w : workers) w.join();
         }
     }
 
     // 2. dB = A^T * gradY -> [K, N]
-    // dB[k, j] = sum_i (A[i, k] * gradY[i, j])
     if (gradB) {
         float* gbData = gradB->dataFloat();
         if (!accumulateB) {
             gradB->fillZero();
         }
-
-        constexpr int64_t BLOCK = 32;
-        for (int64_t kk = 0; kk < K; kk += BLOCK) {
-            int64_t kMax = std::min(K, kk + BLOCK);
-            for (int64_t ii = 0; ii < M; ii += BLOCK) {
-                int64_t iMax = std::min(M, ii + BLOCK);
-                for (int64_t jj = 0; jj < N; jj += BLOCK) {
-                    int64_t jMax = std::min(N, jj + BLOCK);
-
-                    for (int64_t i = ii; i < iMax; ++i) {
-                        const float* aRow = aData + (i * K);
-                        const float* gyRow = gyData + (i * N);
-
-                        for (int64_t k = kk; k < kMax; ++k) {
-                            float aVal = aRow[k];
-                            float* gbRow = gbData + (k * N);
-                            for (int64_t j = jj; j < jMax; ++j) {
-                                gbRow[j] += aVal * gyRow[j];
-                            }
-                        }
-                    }
+        int64_t numThreads = (K >= 4 && (M * K * N) >= 65536 && maxThreads > 1) ? std::min(maxThreads, K) : 1;
+        if (numThreads <= 1) {
+            matmulBackwardBRange(aData, gyData, gbData, 0, K, M, K, N);
+        } else {
+            std::vector<std::thread> workers;
+            workers.reserve(static_cast<size_t>(numThreads - 1));
+            int64_t rowsPerThread = (K + numThreads - 1) / numThreads;
+            for (int64_t t = 1; t < numThreads; ++t) {
+                int64_t kStart = t * rowsPerThread;
+                int64_t kEnd = std::min(K, kStart + rowsPerThread);
+                if (kStart < kEnd) {
+                    workers.emplace_back(matmulBackwardBRange, aData, gyData, gbData, kStart, kEnd, M, K, N);
                 }
             }
+            matmulBackwardBRange(aData, gyData, gbData, 0, std::min(K, rowsPerThread), M, K, N);
+            for (auto& w : workers) w.join();
         }
     }
 }

@@ -103,6 +103,73 @@ static std::string cleanAssistantReply(const std::string& rawReply) {
     return out;
 }
 
+static std::string buildCleanBpeCorpusFromPath(const std::string& corpusPath) {
+    namespace fs = std::filesystem;
+    std::vector<std::string> files;
+    if (fs::is_directory(corpusPath)) {
+        for (const auto& entry : fs::directory_iterator(corpusPath)) {
+            if (entry.is_regular_file()) {
+                auto ext = entry.path().extension();
+                if (ext == ".txt" || ext == ".jsonl") {
+                    files.push_back(entry.path().string());
+                }
+            }
+        }
+        std::sort(files.begin(), files.end());
+    } else if (fs::exists(corpusPath)) {
+        files.push_back(corpusPath);
+    }
+
+    std::string corpus;
+    for (const auto& f : files) {
+        std::ifstream ifs(f, std::ios::binary);
+        if (!ifs) continue;
+        if (fs::path(f).extension() == ".jsonl") {
+            std::string line;
+            while (std::getline(ifs, line)) {
+                std::string blockText, src, lic, err;
+                if (DatasetPipeline::parseJsonlInstructionLine(line, blockText, src, lic, &err) && !blockText.empty()) {
+                    corpus += blockText + "\n\n";
+                }
+            }
+        } else {
+            corpus.append((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+            corpus += "\n";
+        }
+    }
+    return corpus;
+}
+
+static bool verifyTokenizerCompatibility(
+    const CheckpointValidationResult& val,
+    const Tokenizer& tok,
+    const std::string& nbtPath,
+    std::string& outError
+) {
+    if (!nbtPath.empty() && tok.vocabSize() != val.config.vocabSize) {
+        outError = "Tokenizer vocabulary size (" + std::to_string(tok.vocabSize()) +
+                   ") does not match checkpoint vocabulary size (" + std::to_string(val.config.vocabSize) + ")";
+        return false;
+    }
+    if (!nbtPath.empty() && val.config.tokenizerHash != 0ULL) {
+        std::string hashHex = ExperimentManager::computeFileHashHex(nbtPath);
+        uint64_t actualHash = 0ULL;
+        if (hashHex.size() >= 16) {
+            try {
+                actualHash = std::stoull(hashHex.substr(0, 16), nullptr, 16);
+            } catch (...) {
+                actualHash = 0ULL;
+            }
+        }
+        if (actualHash != val.config.tokenizerHash) {
+            outError = "Tokenizer hash mismatch: checkpoint expects " + std::to_string(val.config.tokenizerHash) +
+                       ", got " + std::to_string(actualHash) + " (" + nbtPath + ")";
+            return false;
+        }
+    }
+    return true;
+}
+
 int runTensorTest() {
     std::cout << "\n[TEST 1] Matrix Multiplication Math Verification..." << std::endl;
     Tensor A(Shape({2, 3}));
@@ -428,13 +495,12 @@ int runGeneration(
         return 1;
     }
 
-    if (!nbtPath.empty() && tok->vocabSize() != val.config.vocabSize) {
-        std::string vErr = "Tokenizer vocabulary size (" + std::to_string(tok->vocabSize()) +
-                           ") does not match checkpoint vocabulary size (" + std::to_string(val.config.vocabSize) + ")";
+    std::string tokCompatErr;
+    if (!verifyTokenizerCompatibility(val, *tok, nbtPath, tokCompatErr)) {
         if (jsonOutput) {
-            std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(vErr) << "\"}" << std::endl;
+            std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(tokCompatErr) << "\"}" << std::endl;
         } else {
-            std::cerr << "Error: " << vErr << std::endl;
+            std::cerr << "Error: " << tokCompatErr << std::endl;
         }
         return 1;
     }
@@ -599,28 +665,14 @@ int runBpeTrain(
     uint32_t minFreq = 2,
     bool jsonOutput = false
 ) {
-    std::string corpus;
-    if (std::filesystem::is_directory(corpusPath)) {
-        for (const auto& entry : std::filesystem::directory_iterator(corpusPath)) {
-            if (entry.path().extension() == ".txt") {
-                std::ifstream ifs(entry.path(), std::ios::binary);
-                if (ifs) {
-                    std::string s((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-                    corpus += s + "\n";
-                }
-            }
+    std::string corpus = buildCleanBpeCorpusFromPath(corpusPath);
+    if (corpus.empty() && !std::filesystem::exists(corpusPath)) {
+        if (jsonOutput) {
+            std::cout << "{\"status\":\"error\",\"error\":\"Cannot open corpus file: " << escapeJson(corpusPath) << "\"}" << std::endl;
+        } else {
+            std::cerr << "Error: Cannot open corpus file " << corpusPath << std::endl;
         }
-    } else {
-        std::ifstream ifs(corpusPath, std::ios::binary);
-        if (!ifs) {
-            if (jsonOutput) {
-                std::cout << "{\"status\":\"error\",\"error\":\"Cannot open corpus file: " << escapeJson(corpusPath) << "\"}" << std::endl;
-            } else {
-                std::cerr << "Error: Cannot open corpus file " << corpusPath << std::endl;
-            }
-            return 1;
-        }
-        corpus.assign((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+        return 1;
     }
 
     NexaBpeTokenizer bpe;
@@ -842,13 +894,12 @@ int runQaAnswer(
         return 1;
     }
 
-    if (!nbtPath.empty() && tok->vocabSize() != val.config.vocabSize) {
-        std::string vErr = "Tokenizer vocabulary size (" + std::to_string(tok->vocabSize()) +
-                           ") does not match checkpoint vocabulary size (" + std::to_string(val.config.vocabSize) + ")";
+    std::string tokCompatErr;
+    if (!verifyTokenizerCompatibility(val, *tok, nbtPath, tokCompatErr)) {
         if (jsonOutput) {
-            std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(vErr) << "\"}" << std::endl;
+            std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(tokCompatErr) << "\"}" << std::endl;
         } else {
-            std::cerr << "Error: " << vErr << std::endl;
+            std::cerr << "Error: " << tokCompatErr << std::endl;
         }
         return 1;
     }
@@ -1138,12 +1189,21 @@ int runUnseenEvaluation(
     }
 
     NexaBpeTokenizer bpe;
-    if (!bpe.load(nbtPath) || bpe.vocabSize() != val.config.vocabSize) {
-        std::string err = "Failed to load compatible .nbt tokenizer from " + nbtPath;
+    if (!bpe.load(nbtPath)) {
+        std::string err = "Failed to load .nbt tokenizer from " + nbtPath;
         if (jsonOutput) {
             std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(err) << "\"}" << std::endl;
         } else {
             std::cerr << "Error: " << err << std::endl;
+        }
+        return 1;
+    }
+    std::string tokCompatErr;
+    if (!verifyTokenizerCompatibility(val, bpe, nbtPath, tokCompatErr)) {
+        if (jsonOutput) {
+            std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(tokCompatErr) << "\"}" << std::endl;
+        } else {
+            std::cerr << "Error: " << tokCompatErr << std::endl;
         }
         return 1;
     }
@@ -1250,28 +1310,13 @@ int runDatasetAudit(
     if (!nbtPath.empty() && fs::exists(nbtPath) && bpe.load(nbtPath)) {
         usingTrainedBpe = true;
     } else {
-        std::string corpus;
         std::string scanDir = datasetPath;
         if (fs::is_regular_file(datasetPath)) {
             scanDir = fs::path(datasetPath).parent_path().string();
         }
         std::string trainSub = (fs::path(scanDir) / "train_val").string();
         if (fs::is_directory(trainSub)) scanDir = trainSub;
-        if (fs::is_directory(scanDir)) {
-            std::vector<std::string> files;
-            for (const auto& entry : fs::directory_iterator(scanDir)) {
-                if (entry.is_regular_file()) {
-                    auto ext = entry.path().extension();
-                    if (ext == ".txt" || ext == ".jsonl") files.push_back(entry.path().string());
-                }
-            }
-            std::sort(files.begin(), files.end());
-            for (const auto& f : files) {
-                std::ifstream ifs(f, std::ios::binary);
-                if (ifs) corpus.append((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-                corpus += "\n";
-            }
-        }
+        std::string corpus = buildCleanBpeCorpusFromPath(scanDir);
         if (!corpus.empty()) {
             bpe.train(corpus, targetVocab, 2);
             usingTrainedBpe = true;
@@ -1393,22 +1438,7 @@ int runPhase36Training(
         std::string trainSub = (fs::path(scanDir) / "train_val").string();
         if (fs::is_directory(trainSub)) scanDir = trainSub;
 
-        std::vector<std::string> files;
-        for (const auto& entry : fs::directory_iterator(scanDir)) {
-            if (entry.is_regular_file()) {
-                auto ext = entry.path().extension();
-                if (ext == ".txt" || ext == ".jsonl") files.push_back(entry.path().string());
-            }
-        }
-        std::sort(files.begin(), files.end());
-        std::string corpus;
-        for (const auto& f : files) {
-            std::ifstream ifs(f, std::ios::binary);
-            if (ifs) {
-                corpus.append((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
-                corpus += "\n";
-            }
-        }
+        std::string corpus = buildCleanBpeCorpusFromPath(scanDir);
         bpe.train(corpus, targetVocab, 2);
         bpe.save(nbtPath);
     }
@@ -1460,8 +1490,8 @@ int runPhase36Training(
     pCfg.gradAccumSteps = gradAccum;
     pCfg.learningRate = lr;
     pCfg.minLr = minLr;
-    pCfg.warmupSteps = std::max(5u, steps / 10);
-    pCfg.evalInterval = std::max(5u, steps / 10);
+    pCfg.warmupSteps = std::min(150u, std::max(5u, steps / 12));
+    pCfg.evalInterval = std::min(80u, std::max(5u, steps / 15));
     pCfg.earlyStopPatience = earlyStopPatience;
     pCfg.weightDecay = 0.05f;
     pCfg.seed = seed;

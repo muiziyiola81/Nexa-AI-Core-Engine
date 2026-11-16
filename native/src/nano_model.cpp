@@ -9,6 +9,12 @@
 #include <iostream>
 #include <algorithm>
 #include <chrono>
+#include <thread>
+#include <unordered_map>
+#include <unordered_set>
+#if defined(__AVX2__) && defined(__FMA__)
+#include <immintrin.h>
+#endif
 
 namespace nexa {
 
@@ -210,6 +216,50 @@ void applyRopeInPlace(
     }
 }
 
+void tiedLmHeadForwardRange(
+    const float* hData,
+    const float* eData,
+    float* lData,
+    int64_t T,
+    int64_t D,
+    int64_t V,
+    int64_t vBegin,
+    int64_t vEnd
+) {
+    for (int64_t t = 0; t < T; ++t) {
+        const float* hRow = hData + t * D;
+        float* lRow = lData + t * V;
+        for (int64_t v = vBegin; v < vEnd; ++v) {
+            const float* eRow = eData + v * D;
+#if defined(__AVX2__) && defined(__FMA__)
+            __m256 acc = _mm256_setzero_ps();
+            int64_t d = 0;
+            for (; d + 8 <= D; d += 8) {
+                __m256 vh = _mm256_loadu_ps(hRow + d);
+                __m256 ve = _mm256_loadu_ps(eRow + d);
+                acc = _mm256_fmadd_ps(vh, ve, acc);
+            }
+            __m128 hi = _mm256_extractf128_ps(acc, 1);
+            __m128 lo = _mm256_castps256_ps128(acc);
+            __m128 s4 = _mm_add_ps(lo, hi);
+            __m128 s2 = _mm_hadd_ps(s4, s4);
+            __m128 s1 = _mm_hadd_ps(s2, s2);
+            float dot = _mm_cvtss_f32(s1);
+            for (; d < D; ++d) {
+                dot += hRow[d] * eRow[d];
+            }
+            lRow[v] = dot;
+#else
+            float dot = 0.0f;
+            for (int64_t d = 0; d < D; ++d) {
+                dot += hRow[d] * eRow[d];
+            }
+            lRow[v] = dot;
+#endif
+        }
+    }
+}
+
 void tiedLmHeadForward(
     const Tensor& finalNormOut,
     const Tensor& wEmbedVal,
@@ -223,18 +273,26 @@ void tiedLmHeadForward(
     const float* eData = wEmbedVal.dataFloat();
     float* lData = logitsOut.dataFloat();
 
-    for (int64_t t = 0; t < T; ++t) {
-        const float* hRow = hData + t * D;
-        float* lRow = lData + t * V;
-        for (int64_t v = 0; v < V; ++v) {
-            const float* eRow = eData + v * D;
-            float dot = 0.0f;
-            for (int64_t d = 0; d < D; ++d) {
-                dot += hRow[d] * eRow[d];
-            }
-            lRow[v] = dot;
+    unsigned int hwThreads = std::thread::hardware_concurrency();
+    int64_t numThreads = hwThreads > 0 ? static_cast<int64_t>(std::min<unsigned int>(hwThreads, 4)) : 1;
+    if (V < 8 || (T * D * V) < 65536 || numThreads <= 1) {
+        tiedLmHeadForwardRange(hData, eData, lData, T, D, V, 0, V);
+        return;
+    }
+
+    numThreads = std::min(numThreads, V);
+    std::vector<std::thread> workers;
+    workers.reserve(static_cast<size_t>(numThreads - 1));
+    int64_t colsPerThread = (V + numThreads - 1) / numThreads;
+    for (int64_t th = 1; th < numThreads; ++th) {
+        int64_t vStart = th * colsPerThread;
+        int64_t vEnd = std::min(V, vStart + colsPerThread);
+        if (vStart < vEnd) {
+            workers.emplace_back(tiedLmHeadForwardRange, hData, eData, lData, T, D, V, vStart, vEnd);
         }
     }
+    tiedLmHeadForwardRange(hData, eData, lData, T, D, V, 0, std::min(V, colsPerThread));
+    for (auto& w : workers) w.join();
 }
 
 double forwardAndLossCore(
@@ -751,15 +809,31 @@ int32_t NexaNanoModel::sampleNextToken(
 
     std::vector<float> filtered = logits;
 
-    // 1. Repetition penalty
-    if (cfg.repetitionPenalty > 1.0f) {
+    // 0. Never sample <unk> (0), <bos> (1), or <pad> (3) during decoding (keep <eos> (2) active)
+    if (vocabSize > 4) {
+        filtered[0] = -1e9f;
+        filtered[1] = -1e9f;
+        filtered[3] = -1e9f;
+    }
+
+    // 1. Repetition penalty (deduplicated + frequency-aware over recent generated tokens)
+    if (cfg.repetitionPenalty > 1.0f && !contextTokens.empty()) {
+        std::unordered_map<int32_t, int> freq;
         for (int32_t tok : contextTokens) {
             if (tok >= 0 && static_cast<size_t>(tok) < vocabSize) {
-                if (filtered[tok] > 0.0f) {
-                    filtered[tok] /= cfg.repetitionPenalty;
-                } else {
-                    filtered[tok] *= cfg.repetitionPenalty;
-                }
+                freq[tok]++;
+            }
+        }
+        for (const auto& kv : freq) {
+            int32_t tok = kv.first;
+            float penalty = cfg.repetitionPenalty;
+            if (kv.second >= 2) {
+                penalty += 0.10f * static_cast<float>(std::min(kv.second - 1, 4));
+            }
+            if (filtered[tok] > 0.0f) {
+                filtered[tok] /= penalty;
+            } else {
+                filtered[tok] *= penalty;
             }
         }
     }
@@ -885,8 +959,28 @@ GenerationResult NexaNanoModel::generateText(
         const float* lData = logits.dataFloat() + (lastRow * config.vocabSize);
         std::vector<float> lastLogits(lData, lData + config.vocabSize);
 
-        // Sample next token
-        int32_t nextTok = sampleNextToken(lastLogits, currentTokens, genCfg, rng);
+        // Build sliding window over GENERATED tokens only (never penalize user prompt tokens)
+        const size_t genCount = res.generatedTokens.size();
+        const size_t repWindowStart = genCount > 48 ? (genCount - 48) : 0;
+        std::vector<int32_t> recentGenerated(res.generatedTokens.begin() + repWindowStart, res.generatedTokens.end());
+
+        // Suppress exact repeated 3-gram cycles in generated tokens (prevents phrase/token loops)
+        if (genCount >= 3) {
+            int32_t p2 = res.generatedTokens[genCount - 2];
+            int32_t p1 = res.generatedTokens[genCount - 1];
+            for (size_t i = 0; i + 2 < genCount; ++i) {
+                if (res.generatedTokens[i] == p2 && res.generatedTokens[i + 1] == p1) {
+                    int32_t banned = res.generatedTokens[i + 2];
+                    if (banned != tokenizer.specialTokens().eosId &&
+                        banned >= 0 && static_cast<size_t>(banned) < lastLogits.size()) {
+                        lastLogits[banned] -= 12.0f;
+                    }
+                }
+            }
+        }
+
+        // Sample next token using only generated history for repetition penalty
+        int32_t nextTok = sampleNextToken(lastLogits, recentGenerated, genCfg, rng);
 
         // Check stop token
         if (genCfg.stopToken >= 0 && nextTok == genCfg.stopToken) {

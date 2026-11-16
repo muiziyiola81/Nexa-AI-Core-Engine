@@ -8,6 +8,11 @@
 #include <cmath>
 #include <sstream>
 #include <algorithm>
+#include <thread>
+#include <vector>
+#if defined(__AVX2__) && defined(__FMA__)
+#include <immintrin.h>
+#endif
 
 namespace nexa {
 
@@ -110,6 +115,63 @@ void Tensor::fillConstant(float val) {
     }
 }
 
+namespace {
+
+inline void saxpyRow(int64_t len, float aVal, const float* bRow, float* cRow) {
+#if defined(__AVX2__) && defined(__FMA__)
+    __m256 aVec = _mm256_set1_ps(aVal);
+    int64_t j = 0;
+    for (; j + 8 <= len; j += 8) {
+        __m256 cVec = _mm256_loadu_ps(cRow + j);
+        __m256 bVec = _mm256_loadu_ps(bRow + j);
+        cVec = _mm256_fmadd_ps(aVec, bVec, cVec);
+        _mm256_storeu_ps(cRow + j, cVec);
+    }
+    for (; j < len; ++j) {
+        cRow[j] += aVal * bRow[j];
+    }
+#else
+    for (int64_t j = 0; j < len; ++j) {
+        cRow[j] += aVal * bRow[j];
+    }
+#endif
+}
+
+void matmulRowsRange(
+    const float* aData,
+    const float* bData,
+    float* cData,
+    int64_t iBegin,
+    int64_t iEnd,
+    int64_t K,
+    int64_t N
+) {
+    constexpr int64_t BLOCK_I = 64;
+    constexpr int64_t BLOCK_K = 64;
+    constexpr int64_t BLOCK_J = 128;
+
+    for (int64_t ii = iBegin; ii < iEnd; ii += BLOCK_I) {
+        int64_t iMax = std::min(iEnd, ii + BLOCK_I);
+        for (int64_t kk = 0; kk < K; kk += BLOCK_K) {
+            int64_t kMax = std::min(K, kk + BLOCK_K);
+            for (int64_t jj = 0; jj < N; jj += BLOCK_J) {
+                int64_t jMax = std::min(N, jj + BLOCK_J);
+                int64_t jLen = jMax - jj;
+
+                for (int64_t i = ii; i < iMax; ++i) {
+                    const float* aRow = aData + i * K;
+                    float* cRow = cData + i * N + jj;
+                    for (int64_t k = kk; k < kMax; ++k) {
+                        saxpyRow(jLen, aRow[k], bData + k * N + jj, cRow);
+                    }
+                }
+            }
+        }
+    }
+}
+
+} // namespace
+
 void Tensor::matmul(const Tensor& A, const Tensor& B, Tensor& C) {
     if (A.rank() != 2 || B.rank() != 2 || C.rank() != 2) {
         throw std::invalid_argument("matmul expects 2D tensors");
@@ -130,27 +192,30 @@ void Tensor::matmul(const Tensor& A, const Tensor& B, Tensor& C) {
     const float* bData = B.dataFloat();
     float* cData = C.dataFloat();
 
-    // Cache-blocked Matrix Multiplication for high-throughput CPU cache residency
-    constexpr int64_t BLOCK_SIZE = 64;
     C.fillZero();
 
-    for (int64_t ii = 0; ii < M; ii += BLOCK_SIZE) {
-        int64_t iMax = std::min(M, ii + BLOCK_SIZE);
-        for (int64_t kk = 0; kk < K; kk += BLOCK_SIZE) {
-            int64_t kMax = std::min(K, kk + BLOCK_SIZE);
-            for (int64_t jj = 0; jj < N; jj += BLOCK_SIZE) {
-                int64_t jMax = std::min(N, jj + BLOCK_SIZE);
+    unsigned int hwThreads = std::thread::hardware_concurrency();
+    int64_t numThreads = hwThreads > 0 ? static_cast<int64_t>(std::min<unsigned int>(hwThreads, 4)) : 1;
+    if (M < 4 || (M * K * N) < 65536 || numThreads <= 1) {
+        matmulRowsRange(aData, bData, cData, 0, M, K, N);
+        return;
+    }
 
-                for (int64_t i = ii; i < iMax; ++i) {
-                    for (int64_t k = kk; k < kMax; ++k) {
-                        float aVal = aData[i * K + k];
-                        for (int64_t j = jj; j < jMax; ++j) {
-                            cData[i * N + j] += aVal * bData[k * N + j];
-                        }
-                    }
-                }
-            }
+    numThreads = std::min(numThreads, M);
+    std::vector<std::thread> workers;
+    workers.reserve(static_cast<size_t>(numThreads - 1));
+    int64_t rowsPerThread = (M + numThreads - 1) / numThreads;
+
+    for (int64_t t = 1; t < numThreads; ++t) {
+        int64_t rStart = t * rowsPerThread;
+        int64_t rEnd = std::min(M, rStart + rowsPerThread);
+        if (rStart < rEnd) {
+            workers.emplace_back(matmulRowsRange, aData, bData, cData, rStart, rEnd, K, N);
         }
+    }
+    matmulRowsRange(aData, bData, cData, 0, std::min(M, rowsPerThread), K, N);
+    for (auto& w : workers) {
+        w.join();
     }
 }
 
@@ -193,11 +258,31 @@ void Tensor::vecScale(const Tensor& A, float scalar, Tensor& out) {
 }
 
 float Tensor::dotProduct(const float* a, const float* b, size_t n) {
+#if defined(__AVX2__) && defined(__FMA__)
+    __m256 acc = _mm256_setzero_ps();
+    size_t i = 0;
+    for (; i + 8 <= n; i += 8) {
+        __m256 va = _mm256_loadu_ps(a + i);
+        __m256 vb = _mm256_loadu_ps(b + i);
+        acc = _mm256_fmadd_ps(va, vb, acc);
+    }
+    __m128 hi = _mm256_extractf128_ps(acc, 1);
+    __m128 lo = _mm256_castps256_ps128(acc);
+    __m128 sum4 = _mm_add_ps(lo, hi);
+    __m128 sum2 = _mm_hadd_ps(sum4, sum4);
+    __m128 sum1 = _mm_hadd_ps(sum2, sum2);
+    float sum = _mm_cvtss_f32(sum1);
+    for (; i < n; ++i) {
+        sum += a[i] * b[i];
+    }
+    return sum;
+#else
     float sum = 0.0f;
     for (size_t i = 0; i < n; ++i) {
         sum += a[i] * b[i];
     }
     return sum;
+#endif
 }
 
 void Tensor::softmax(const Tensor& input, Tensor& output, int axis) {
