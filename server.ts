@@ -9,7 +9,6 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import { createServer as createViteServer } from 'vite';
 import { ModelRegistry } from './server/store/model_registry.js';
 import { ConfigStore } from './server/store/config.js';
 import { KeyStore } from './server/store/key_store.js';
@@ -79,28 +78,42 @@ export function createNexaApp(deps?: {
     next();
   });
 
-  // Mount API router
+  // Mount API router and central JSON error handler
   const apiRouter = createApiRouter(engineManager, registry, keyStore, configStore);
   app.use(apiRouter);
+  app.use(errorHandler);
 
   return { app, registry, configStore, keyStore, engineManager };
 }
 
 async function startServer() {
-  let port = parseInt(process.env.PORT || '3000', 10);
+  const envPort =
+    process.env.PORT && process.env.PORT !== process.env.NGINX_PORT
+      ? process.env.PORT
+      : process.env.DEFAULT_APP_PORT || '3000';
+  let port = parseInt(envPort, 10);
+  if (Number.isNaN(port) || port <= 0) {
+    port = 3000;
+  }
   const portIndex = process.argv.indexOf('--port');
   if (portIndex !== -1 && process.argv[portIndex + 1]) {
     port = parseInt(process.argv[portIndex + 1], 10);
   }
 
-  let host = '0.0.0.0';
+  let host = process.env.HOST || '0.0.0.0';
   const hostIndex = process.argv.indexOf('--host');
   if (hostIndex !== -1 && process.argv[hostIndex + 1]) {
     host = process.argv[hostIndex + 1];
   }
 
   const isProduction = process.env.NODE_ENV === 'production';
-  const isStandaloneApi = process.env.STANDALONE_API === 'true' || process.argv.includes('--standalone');
+  const invokedViaStandaloneEntry =
+    Boolean(process.argv[1] && process.argv[1].endsWith('standalone.ts')) ||
+    process.argv.includes('--standalone');
+  const inDevPreviewProxy = !isProduction && Boolean(process.env.CONTROL_PLANE_PORT);
+  const isStandaloneApi =
+    invokedViaStandaloneEntry ||
+    (!inDevPreviewProxy && process.env.STANDALONE_API === 'true');
 
   const { app, registry, configStore, keyStore, engineManager } = createNexaApp();
 
@@ -116,18 +129,26 @@ async function startServer() {
   }
 
   // Run startup checks & pre-load configured/bundled .nexa checkpoints
-  const startup = await engineManager.startupBootstrap();
-  console.log(`[NEXA ENGINE] Native Adapter Available: ${startup.adapterAvailable ? 'YES (' + startup.adapterBinaryPath + ')' : 'NO (' + startup.adapterReason + ')'}`);
-  console.log(`[NEXA ENGINE] Storage Writable: data=${startup.dataDirWritable}, models=${startup.modelsDirWritable}`);
-  if (startup.autoLoadedModels.length > 0) {
-    console.log(`[NEXA ENGINE] Auto-loaded models on boot: ${startup.autoLoadedModels.join(', ')}`);
-  }
-  if (startup.modelLoadErrors.length > 0) {
-    console.warn(`[NEXA ENGINE] Model auto-load warnings: ${JSON.stringify(startup.modelLoadErrors)}`);
+  try {
+    const startup = await engineManager.startupBootstrap();
+    console.log(`[NEXA ENGINE] Native Adapter Available: ${startup.adapterAvailable ? 'YES (' + startup.adapterBinaryPath + ')' : 'NO (' + startup.adapterReason + ')'}`);
+    console.log(`[NEXA ENGINE] Storage Writable: data=${startup.dataDirWritable}, models=${startup.modelsDirWritable}`);
+    if (startup.autoLoadedModels.length > 0) {
+      console.log(`[NEXA ENGINE] Auto-loaded models on boot: ${startup.autoLoadedModels.join(', ')}`);
+    }
+    if (startup.modelLoadErrors.length > 0) {
+      console.warn(`[NEXA ENGINE] Model auto-load warnings: ${JSON.stringify(startup.modelLoadErrors)}`);
+    }
+  } catch (err) {
+    console.warn('[NEXA ENGINE] Startup bootstrap warning:', err);
   }
 
-  const sysInfo = await engineManager.getSystemInfo();
-  console.log(`[NEXA ENGINE] Platform: ${sysInfo.platform} (${sysInfo.arch}), Cores: ${sysInfo.cpuCores}, Memory: ${sysInfo.totalMemoryMb} MB`);
+  try {
+    const sysInfo = await engineManager.getSystemInfo();
+    console.log(`[NEXA ENGINE] Platform: ${sysInfo.platform} (${sysInfo.arch}), Cores: ${sysInfo.cpuCores}, Memory: ${sysInfo.totalMemoryMb} MB`);
+  } catch (err) {
+    console.warn('[NEXA ENGINE] System info probe warning:', err);
+  }
 
   // Mount frontend SPA or standalone API landing route before central error handler
   if (isStandaloneApi) {
@@ -148,6 +169,7 @@ async function startServer() {
       });
     });
   } else if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa'

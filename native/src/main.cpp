@@ -50,6 +50,59 @@ static std::string escapeJson(const std::string& s) {
     return o.str();
 }
 
+static std::string trimEdges(const std::string& s) {
+    size_t start = 0;
+    while (start < s.size() && (s[start] == ' ' || s[start] == '\t' || s[start] == '\r' || s[start] == '\n')) {
+        ++start;
+    }
+    size_t end = s.size();
+    while (end > start && (s[end - 1] == ' ' || s[end - 1] == '\t' || s[end - 1] == '\r' || s[end - 1] == '\n')) {
+        --end;
+    }
+    return s.substr(start, end - start);
+}
+
+static std::string normalizeConversationPrompt(const std::string& rawInput) {
+    std::string trimmed = trimEdges(rawInput);
+    if (trimmed.empty()) return "User:\nAssistant:";
+
+    bool hasCanonicalRole =
+        trimmed.rfind("User:", 0) == 0 ||
+        trimmed.rfind("System:", 0) == 0 ||
+        trimmed.rfind("Assistant:", 0) == 0 ||
+        trimmed.find("\nUser:") != std::string::npos ||
+        trimmed.find("\nSystem:") != std::string::npos ||
+        trimmed.find("\nAssistant:") != std::string::npos;
+
+    if (!hasCanonicalRole) {
+        return "User: " + trimmed + "\nAssistant:";
+    }
+
+    // Already formatted with canonical System:/User:/Assistant: roles.
+    // Ensure it ends with Assistant: so the model generates the assistant turn.
+    const std::string suffix = "Assistant:";
+    if (trimmed.size() >= suffix.size() &&
+        trimmed.compare(trimmed.size() - suffix.size(), suffix.size(), suffix) == 0) {
+        return trimmed;
+    }
+    return trimmed + "\nAssistant:";
+}
+
+static std::string cleanAssistantReply(const std::string& rawReply) {
+    std::string out = rawReply;
+    // Strip a single leading space emitted by word-with-leading-space BPE tokens after "Assistant:"
+    if (!out.empty() && out.front() == ' ') {
+        out.erase(0, 1);
+    }
+    while (!out.empty() && (out.front() == '\r' || out.front() == '\n')) {
+        out.erase(0, 1);
+    }
+    while (!out.empty() && (out.back() == '\r' || out.back() == '\n' || out.back() == ' ')) {
+        out.pop_back();
+    }
+    return out;
+}
+
 int runTensorTest() {
     std::cout << "\n[TEST 1] Matrix Multiplication Math Verification..." << std::endl;
     Tensor A(Shape({2, 3}));
@@ -317,7 +370,8 @@ int runGeneration(
     float topP = 0.9f,
     float repPenalty = 1.15f,
     uint64_t seed = 42,
-    bool jsonOutput = false
+    bool jsonOutput = false,
+    const std::string& nbtPath = ""
 ) {
     auto val = NexaNanoModel::validateCheckpoint(ckptPath);
     if (!val.valid) {
@@ -340,7 +394,51 @@ int runGeneration(
         return 1;
     }
 
-    NexaByteTokenizer tokenizer;
+    std::unique_ptr<Tokenizer> tok;
+    if (!nbtPath.empty()) {
+        if (!std::filesystem::exists(nbtPath)) {
+            std::string err = "Tokenizer file not found: " + nbtPath;
+            if (jsonOutput) {
+                std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(err) << "\"}" << std::endl;
+            } else {
+                std::cerr << "Error: " << err << std::endl;
+            }
+            return 1;
+        }
+        auto bpe = std::make_unique<NexaBpeTokenizer>();
+        if (!bpe->load(nbtPath)) {
+            std::string err = "Failed to load BPE tokenizer: " + nbtPath;
+            if (jsonOutput) {
+                std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(err) << "\"}" << std::endl;
+            } else {
+                std::cerr << "Error: " << err << std::endl;
+            }
+            return 1;
+        }
+        tok = std::move(bpe);
+    } else if (val.config.vocabSize <= 260) {
+        tok = std::make_unique<NexaByteTokenizer>();
+    } else {
+        std::string err = "Checkpoint requires a BPE .nbt tokenizer (vocab_size=" + std::to_string(val.config.vocabSize) + ")";
+        if (jsonOutput) {
+            std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(err) << "\"}" << std::endl;
+        } else {
+            std::cerr << "Error: " << err << std::endl;
+        }
+        return 1;
+    }
+
+    if (!nbtPath.empty() && tok->vocabSize() != val.config.vocabSize) {
+        std::string vErr = "Tokenizer vocabulary size (" + std::to_string(tok->vocabSize()) +
+                           ") does not match checkpoint vocabulary size (" + std::to_string(val.config.vocabSize) + ")";
+        if (jsonOutput) {
+            std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(vErr) << "\"}" << std::endl;
+        } else {
+            std::cerr << "Error: " << vErr << std::endl;
+        }
+        return 1;
+    }
+
     GenerationConfig genCfg;
     genCfg.maxNewTokens = maxTokens;
     genCfg.temperature = temp;
@@ -349,7 +447,15 @@ int runGeneration(
     genCfg.repetitionPenalty = repPenalty;
     genCfg.seed = seed;
 
-    auto genRes = model.generateText(prompt, tokenizer, genCfg);
+    auto genRes = model.generateText(prompt, *tok, genCfg);
+    if (!genRes.success) {
+        if (jsonOutput) {
+            std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(genRes.errorMessage) << "\"}" << std::endl;
+        } else {
+            std::cerr << "Error during generation: " << genRes.errorMessage << std::endl;
+        }
+        return 1;
+    }
 
     if (jsonOutput) {
         std::cout << "{"
@@ -358,7 +464,12 @@ int runGeneration(
                   << "\"prompt\":\"" << escapeJson(prompt) << "\","
                   << "\"generated_text\":\"" << escapeJson(genRes.generatedText) << "\","
                   << "\"full_text\":\"" << escapeJson(genRes.fullText) << "\","
+                  << "\"prompt_tokens\":" << genRes.promptTokens.size() << ","
                   << "\"tokens_generated\":" << genRes.tokensGenerated << ","
+                  << "\"max_seq_len\":" << val.config.maxSeqLen << ","
+                  << "\"vocab_size\":" << val.config.vocabSize << ","
+                  << "\"use_rope\":" << (val.config.useRope ? "true" : "false") << ","
+                  << "\"tie_embeddings\":" << (val.config.tieEmbeddings ? "true" : "false") << ","
                   << "\"duration_ms\":" << genRes.durationMs << ","
                   << "\"tokens_per_second\":" << genRes.tokensPerSecond << ","
                   << "\"finish_reason\":\"" << genRes.finishReason << "\""
@@ -366,10 +477,13 @@ int runGeneration(
     } else {
         std::cout << "\n----------------------------------------------------------------" << std::endl;
         std::cout << "Loaded Checkpoint: " << ckptPath << std::endl;
-        std::cout << "Architecture: " << val.config.nLayers << "L, " << val.config.nHeads << "H, " << val.config.dim << "D" << std::endl;
+        std::cout << "Architecture: " << val.config.nLayers << "L, " << val.config.nHeads << "H, " << val.config.dim << "D"
+                  << " (RoPE=" << (val.config.useRope ? "on" : "off")
+                  << ", Tied=" << (val.config.tieEmbeddings ? "on" : "off") << ")" << std::endl;
         std::cout << "Prompt:            \"" << prompt << "\"" << std::endl;
         std::cout << "Generated Output:  \"" << genRes.generatedText << "\"" << std::endl;
         std::cout << "Full Text:         \"" << genRes.fullText << "\"" << std::endl;
+        std::cout << "Prompt Tokens:     " << genRes.promptTokens.size() << " / " << val.config.maxSeqLen << std::endl;
         std::cout << "Tokens Generated:  " << genRes.tokensGenerated << std::endl;
         std::cout << "Duration:          " << std::fixed << std::setprecision(2) << genRes.durationMs << " ms" << std::endl;
         std::cout << "Inference Speed:   " << std::fixed << std::setprecision(1) << genRes.tokensPerSecond << " tokens/sec" << std::endl;
@@ -444,8 +558,14 @@ int runCheckpointValidation(const std::string& ckptPath, bool jsonOutput) {
                   << "\"arch_type\":" << val.archType << ","
                   << "\"vocab_size\":" << val.config.vocabSize << ","
                   << "\"dim\":" << val.config.dim << ","
+                  << "\"intermediate_dim\":" << val.config.intermediateDim << ","
                   << "\"layers\":" << val.config.nLayers << ","
                   << "\"heads\":" << val.config.nHeads << ","
+                  << "\"max_seq_len\":" << val.config.maxSeqLen << ","
+                  << "\"rope_theta\":" << val.config.ropeTheta << ","
+                  << "\"use_rope\":" << (val.config.useRope ? "true" : "false") << ","
+                  << "\"tie_embeddings\":" << (val.config.tieEmbeddings ? "true" : "false") << ","
+                  << "\"tokenizer_hash\":" << val.config.tokenizerHash << ","
                   << "\"tensors\":" << val.tensorCount << ","
                   << "\"weight_bytes\":" << val.totalWeightBytes << ","
                   << "\"step\":" << val.step << ","
@@ -460,8 +580,11 @@ int runCheckpointValidation(const std::string& ckptPath, bool jsonOutput) {
         }
         std::cout << "Checkpoint Valid: " << ckptPath << std::endl;
         std::cout << "Format Version: " << val.version << " | Architecture Type: " << val.archType << std::endl;
-        std::cout << "Vocab Size: " << val.config.vocabSize << " | Dim: " << val.config.dim << std::endl;
-        std::cout << "Layers: " << val.config.nLayers << " | Heads: " << val.config.nHeads << std::endl;
+        std::cout << "Vocab Size: " << val.config.vocabSize << " | Dim: " << val.config.dim
+                  << " | FFN: " << val.config.intermediateDim << " | Ctx: " << val.config.maxSeqLen << std::endl;
+        std::cout << "Layers: " << val.config.nLayers << " | Heads: " << val.config.nHeads
+                  << " | RoPE: " << (val.config.useRope ? "true" : "false")
+                  << " | Tied: " << (val.config.tieEmbeddings ? "true" : "false") << std::endl;
         std::cout << "Tensors: " << val.tensorCount << " | Total Weight Bytes: " << val.totalWeightBytes << std::endl;
         std::cout << "Training Step: " << val.step << " | Loss: " << val.loss << std::endl;
         std::cout << "Optimizer State: " << (val.hasOptimizerState ? "Present" : "None") << std::endl;
@@ -659,7 +782,7 @@ int runQaAnswer(
     const std::string& ckptPath,
     const std::string& question,
     const std::string& nbtPath = "data/tokenizers/nexa_bpe_qa.nbt",
-    uint32_t maxTokens = 32,
+    uint32_t maxTokens = 48,
     float temp = 0.5f,
     uint64_t seed = 42,
     bool jsonOutput = false
@@ -686,17 +809,40 @@ int runQaAnswer(
     }
 
     std::unique_ptr<Tokenizer> tok;
-    if (!nbtPath.empty() && std::filesystem::exists(nbtPath)) {
-        auto bpe = std::make_unique<NexaBpeTokenizer>();
-        if (bpe->load(nbtPath)) {
-            tok = std::move(bpe);
+    if (!nbtPath.empty()) {
+        if (!std::filesystem::exists(nbtPath)) {
+            std::string err = "Tokenizer file not found: " + nbtPath;
+            if (jsonOutput) {
+                std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(err) << "\"}" << std::endl;
+            } else {
+                std::cerr << "Error: " << err << std::endl;
+            }
+            return 1;
         }
-    }
-    if (!tok) {
+        auto bpe = std::make_unique<NexaBpeTokenizer>();
+        if (!bpe->load(nbtPath)) {
+            std::string err = "Failed to load BPE tokenizer: " + nbtPath;
+            if (jsonOutput) {
+                std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(err) << "\"}" << std::endl;
+            } else {
+                std::cerr << "Error: " << err << std::endl;
+            }
+            return 1;
+        }
+        tok = std::move(bpe);
+    } else if (val.config.vocabSize <= 260) {
         tok = std::make_unique<NexaByteTokenizer>();
+    } else {
+        std::string err = "Checkpoint requires a BPE .nbt tokenizer (vocab_size=" + std::to_string(val.config.vocabSize) + ")";
+        if (jsonOutput) {
+            std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(err) << "\"}" << std::endl;
+        } else {
+            std::cerr << "Error: " << err << std::endl;
+        }
+        return 1;
     }
 
-    if (tok->vocabSize() != val.config.vocabSize) {
+    if (!nbtPath.empty() && tok->vocabSize() != val.config.vocabSize) {
         std::string vErr = "Tokenizer vocabulary size (" + std::to_string(tok->vocabSize()) +
                            ") does not match checkpoint vocabulary size (" + std::to_string(val.config.vocabSize) + ")";
         if (jsonOutput) {
@@ -707,34 +853,53 @@ int runQaAnswer(
         return 1;
     }
 
-    std::string prompt = "Q: " + question + "\nA: ";
+    std::string prompt = normalizeConversationPrompt(question);
     GenerationConfig genCfg;
     genCfg.maxNewTokens = maxTokens;
     genCfg.temperature = temp;
-    genCfg.topK = 20;
+    genCfg.topK = 24;
     genCfg.topP = 0.9f;
     genCfg.repetitionPenalty = 1.15f;
     genCfg.seed = seed;
-    genCfg.stopSequences = {"\nQ:", "\nQuestion:", "\n\n"};
+    genCfg.stopSequences = {
+        "\nUser:", "\nAssistant:", "\nSystem:",
+        "\nQ:", "\nQuestion:", "\n\n", "<|end_of_text|>"
+    };
 
     auto genRes = model.generateText(prompt, *tok, genCfg);
+    if (!genRes.success) {
+        if (jsonOutput) {
+            std::cout << "{\"status\":\"error\",\"error\":\"" << escapeJson(genRes.errorMessage) << "\"}" << std::endl;
+        } else {
+            std::cerr << "Error generating answer: " << genRes.errorMessage << std::endl;
+        }
+        return 1;
+    }
+
+    std::string cleanedAnswer = cleanAssistantReply(genRes.generatedText);
 
     if (jsonOutput) {
         std::cout << "{"
                   << "\"status\":\"ok\","
                   << "\"question\":\"" << escapeJson(question) << "\","
                   << "\"prompt\":\"" << escapeJson(prompt) << "\","
-                  << "\"answer\":\"" << escapeJson(genRes.generatedText) << "\","
+                  << "\"answer\":\"" << escapeJson(cleanedAnswer) << "\","
                   << "\"full_text\":\"" << escapeJson(genRes.fullText) << "\","
+                  << "\"prompt_tokens\":" << genRes.promptTokens.size() << ","
                   << "\"tokens_generated\":" << genRes.tokensGenerated << ","
+                  << "\"max_seq_len\":" << val.config.maxSeqLen << ","
+                  << "\"vocab_size\":" << val.config.vocabSize << ","
+                  << "\"use_rope\":" << (val.config.useRope ? "true" : "false") << ","
+                  << "\"tie_embeddings\":" << (val.config.tieEmbeddings ? "true" : "false") << ","
                   << "\"duration_ms\":" << genRes.durationMs << ","
                   << "\"tokens_per_second\":" << genRes.tokensPerSecond << ","
                   << "\"finish_reason\":\"" << escapeJson(genRes.finishReason) << "\""
                   << "}" << std::endl;
     } else {
         std::cout << "Question: " << question << std::endl;
-        std::cout << "Answer: " << genRes.generatedText << std::endl;
-        std::cout << "(Generated " << genRes.tokensGenerated << " tokens in "
+        std::cout << "Answer: " << cleanedAnswer << std::endl;
+        std::cout << "(Prompt " << genRes.promptTokens.size() << "/" << val.config.maxSeqLen
+                  << " tok, generated " << genRes.tokensGenerated << " tokens in "
                   << genRes.durationMs << " ms, " << std::fixed << std::setprecision(1)
                   << genRes.tokensPerSecond << " tok/s)" << std::endl;
     }
@@ -1197,7 +1362,12 @@ int runPhase36Training(
     uint32_t earlyStopPatience = 6,
     uint64_t seed = 42,
     bool requireVerifiedLicense = false,
-    bool jsonOutput = false
+    bool jsonOutput = false,
+    bool useRope = false,
+    bool tieEmbeddings = false,
+    uint32_t intermediateDim = 0,
+    const std::string& resumeCkptPath = "",
+    float minLr = 1e-4f
 ) {
     namespace fs = std::filesystem;
     if (!fs::exists(datasetPath)) {
@@ -1258,10 +1428,21 @@ int runPhase36Training(
     NanoConfig cfg;
     cfg.vocabSize = static_cast<uint32_t>(bpe.vocabSize());
     cfg.dim = dim;
-    cfg.intermediateDim = dim * 2;
+    cfg.intermediateDim = intermediateDim > 0 ? intermediateDim : dim * 2;
     cfg.nLayers = layers;
     cfg.nHeads = heads;
     cfg.maxSeqLen = seqLen;
+    cfg.useRope = useRope;
+    cfg.tieEmbeddings = tieEmbeddings;
+
+    std::string tokHashHex = ExperimentManager::computeFileHashHex(nbtPath);
+    if (tokHashHex.size() >= 16) {
+        try {
+            cfg.tokenizerHash = std::stoull(tokHashHex.substr(0, 16), nullptr, 16);
+        } catch (...) {
+            cfg.tokenizerHash = 0;
+        }
+    }
 
     NexaNanoModel model(cfg, seed);
 
@@ -1278,7 +1459,7 @@ int runPhase36Training(
     pCfg.batchSize = batchSize;
     pCfg.gradAccumSteps = gradAccum;
     pCfg.learningRate = lr;
-    pCfg.minLr = 1e-4f;
+    pCfg.minLr = minLr;
     pCfg.warmupSteps = std::max(5u, steps / 10);
     pCfg.evalInterval = std::max(5u, steps / 10);
     pCfg.earlyStopPatience = earlyStopPatience;
@@ -1288,6 +1469,7 @@ int runPhase36Training(
     pCfg.ignoreIndex = DatasetPipeline::IGNORE_INDEX;
     pCfg.checkpointPath = finalCkptPath;
     pCfg.bestCheckpointPath = bestCkptPath;
+    pCfg.resumeFromCheckpoint = resumeCkptPath;
     pCfg.promptForSample = "User: What is a CPU?\nAssistant:";
 
     auto res = NexaTrainer::trainWithDatasetAdvanced(model, dataset, pCfg, &bpe);
@@ -1330,7 +1512,7 @@ int runPhase36Training(
     expRec.qualityReport = dataset.qualityReport();
     expRec.tokenizerInfo.type = "bpe";
     expRec.tokenizerInfo.path = nbtPath;
-    expRec.tokenizerInfo.versionHash = ExperimentManager::computeFileHashHex(nbtPath);
+    expRec.tokenizerInfo.versionHash = tokHashHex;
     expRec.tokenizerInfo.vocabSize = static_cast<uint32_t>(bpe.vocabSize());
     expRec.tokenizerInfo.numMerges = static_cast<uint32_t>(bpe.numMerges());
     expRec.trainingConfig = pCfg;
@@ -1350,6 +1532,10 @@ int runPhase36Training(
                   << "\"license_verified\":" << (dataset.metadata().licenseVerified ? "true" : "false") << ","
                   << "\"total_parameters\":" << model.totalParameters() << ","
                   << "\"vocab_size\":" << bpe.vocabSize() << ","
+                  << "\"intermediate_dim\":" << cfg.intermediateDim << ","
+                  << "\"max_seq_len\":" << cfg.maxSeqLen << ","
+                  << "\"use_rope\":" << (cfg.useRope ? "true" : "false") << ","
+                  << "\"tie_embeddings\":" << (cfg.tieEmbeddings ? "true" : "false") << ","
                   << "\"documents\":" << dataset.metadata().documentsCount << ","
                   << "\"examples\":" << dataset.metadata().exampleCount << ","
                   << "\"bytes\":" << dataset.metadata().fileSizeBytes << ","
@@ -1364,8 +1550,8 @@ int runPhase36Training(
                   << "\"initial_val_loss\":" << res.initialValLoss << ","
                   << "\"final_val_loss\":" << res.finalValLoss << ","
                   << "\"best_val_loss\":" << res.bestValLoss << ","
-                  << "\"best_perplexity\":" << res.bestPerplexity << ","
                   << "\"best_checkpoint_step\":" << res.bestCheckpointStep << ","
+                  << "\"best_perplexity\":" << res.bestPerplexity << ","
                   << "\"overfitting_detected\":" << (res.overfittingDetected ? "true" : "false") << ","
                   << "\"tokens_per_sec\":" << res.tokensPerSecond << ","
                   << "\"peak_rss_mb\":" << res.peakRssMb << ","
@@ -1426,9 +1612,27 @@ int main(int argc, char* argv[]) {
                 std::cerr << "{\"status\":\"error\",\"error\":\"Missing text argument for tokenize\"}" << std::endl;
                 return 1;
             }
-            NexaByteTokenizer tok;
-            auto tokens = tok.encode(argv[2], true, false);
-            std::cout << "{\"status\":\"ok\",\"tokens\":[";
+            std::string nbtPath = argc > 3 ? argv[3] : "";
+            std::unique_ptr<Tokenizer> tok;
+            std::string tokType = "byte";
+            if (!nbtPath.empty()) {
+                if (!std::filesystem::exists(nbtPath)) {
+                    std::cout << "{\"status\":\"error\",\"error\":\"Tokenizer file not found: " << escapeJson(nbtPath) << "\"}" << std::endl;
+                    return 1;
+                }
+                auto bpe = std::make_unique<NexaBpeTokenizer>();
+                if (!bpe->load(nbtPath)) {
+                    std::cout << "{\"status\":\"error\",\"error\":\"Failed to load BPE tokenizer: " << escapeJson(nbtPath) << "\"}" << std::endl;
+                    return 1;
+                }
+                tok = std::move(bpe);
+                tokType = "bpe";
+            } else {
+                tok = std::make_unique<NexaByteTokenizer>();
+            }
+            const bool addBos = nbtPath.empty();
+            auto tokens = tok->encode(argv[2], addBos, false);
+            std::cout << "{\"status\":\"ok\",\"tokenizer\":\"" << tokType << "\",\"vocab_size\":" << tok->vocabSize() << ",\"tokens\":[";
             for (size_t i = 0; i < tokens.size(); ++i) {
                 std::cout << tokens[i] << (i + 1 < tokens.size() ? "," : "");
             }
@@ -1441,21 +1645,42 @@ int main(int argc, char* argv[]) {
                 std::cerr << "{\"status\":\"error\",\"error\":\"Missing path argument for inspect\"}" << std::endl;
                 return 1;
             }
+            auto val = NexaNanoModel::validateCheckpoint(argv[2]);
             auto meta = ModelLoader::inspectModel(argv[2]);
-            if (!meta.isValid) {
+            if (!val.valid && !meta.isValid) {
                 std::cerr << "{\"status\":\"error\",\"error\":\"File is not a valid .nexa model format\"}" << std::endl;
                 return 1;
             }
+            uint32_t version = val.valid ? val.version : meta.header.version;
+            uint32_t dim = val.valid ? val.config.dim : meta.header.dim;
+            uint32_t interDim = val.valid ? val.config.intermediateDim : meta.header.intermediateDim;
+            uint32_t layers = val.valid ? val.config.nLayers : meta.header.nLayers;
+            uint32_t heads = val.valid ? val.config.nHeads : meta.header.nHeads;
+            uint32_t kvHeads = meta.isValid ? meta.header.nKvHeads : heads;
+            uint32_t vocabSize = val.valid ? val.config.vocabSize : meta.header.vocabSize;
+            uint32_t maxSeqLen = val.valid ? val.config.maxSeqLen : meta.header.maxSeqLen;
+            float ropeTheta = val.valid ? val.config.ropeTheta : meta.header.ropeTheta;
+            bool useRope = val.valid ? val.config.useRope : false;
+            bool tieEmbeddings = val.valid ? val.config.tieEmbeddings : false;
+            uint32_t tensors = val.valid ? val.tensorCount : static_cast<uint32_t>(meta.tensors.size());
+            uint64_t weightBytes = val.valid ? val.totalWeightBytes : meta.totalWeightBytes;
             std::cout << "{"
                       << "\"status\":\"ok\","
                       << "\"valid\":true,"
+                      << "\"version\":" << version << ","
                       << "\"architecture\":\"transformer\","
-                      << "\"hidden_dim\":" << meta.header.dim << ","
-                      << "\"layers\":" << meta.header.nLayers << ","
-                      << "\"heads\":" << meta.header.nHeads << ","
-                      << "\"kv_heads\":" << meta.header.nKvHeads << ","
-                      << "\"tensors\":" << meta.tensors.size() << ","
-                      << "\"weight_bytes\":" << meta.totalWeightBytes
+                      << "\"vocab_size\":" << vocabSize << ","
+                      << "\"hidden_dim\":" << dim << ","
+                      << "\"intermediate_dim\":" << interDim << ","
+                      << "\"layers\":" << layers << ","
+                      << "\"heads\":" << heads << ","
+                      << "\"kv_heads\":" << kvHeads << ","
+                      << "\"max_seq_len\":" << maxSeqLen << ","
+                      << "\"rope_theta\":" << ropeTheta << ","
+                      << "\"use_rope\":" << (useRope ? "true" : "false") << ","
+                      << "\"tie_embeddings\":" << (tieEmbeddings ? "true" : "false") << ","
+                      << "\"tensors\":" << tensors << ","
+                      << "\"weight_bytes\":" << weightBytes
                       << "}" << std::endl;
             return 0;
         }
@@ -1476,7 +1701,7 @@ int main(int argc, char* argv[]) {
 
         if (arg == "--generate-json") {
             if (argc < 4) {
-                std::cerr << "{\"status\":\"error\",\"error\":\"Usage: --generate-json <checkpoint> <prompt> [max_tokens] [temp] [top_k] [top_p] [rep_penalty] [seed]\"}" << std::endl;
+                std::cerr << "{\"status\":\"error\",\"error\":\"Usage: --generate-json <checkpoint> <prompt> [max_tokens] [temp] [top_k] [top_p] [rep_penalty] [seed] [nbt_path]\"}" << std::endl;
                 return 1;
             }
             std::string ckpt = argv[2];
@@ -1487,7 +1712,8 @@ int main(int argc, char* argv[]) {
             float topP = argc > 7 ? std::stof(argv[7]) : 0.9f;
             float repPenalty = argc > 8 ? std::stof(argv[8]) : 1.15f;
             uint64_t seed = argc > 9 ? std::stoull(argv[9]) : 42;
-            return runGeneration(ckpt, prompt, maxTokens, temp, topK, topP, repPenalty, seed, true);
+            std::string nbtPath = argc > 10 ? argv[10] : "";
+            return runGeneration(ckpt, prompt, maxTokens, temp, topK, topP, repPenalty, seed, true, nbtPath);
         }
 
         if (arg == "--validate-checkpoint-json") {
@@ -1623,7 +1849,7 @@ int main(int argc, char* argv[]) {
 
         if (arg == "--train-phase36-json") {
             if (argc < 3) {
-                std::cerr << "{\"status\":\"error\",\"error\":\"Usage: --train-phase36-json <dataset_dir> [best_ckpt] [nbt] [unseen] [exp_id] [steps] [dim] [layers] [heads] [vocab] [seq_len] [batch] [accum] [lr] [patience] [seed] [require_lic]\"}" << std::endl;
+                std::cerr << "{\"status\":\"error\",\"error\":\"Usage: --train-phase36-json <dataset_dir> [best_ckpt] [nbt] [unseen] [exp_id] [steps] [dim] [layers] [heads] [vocab] [seq_len] [batch] [accum] [lr] [patience] [seed] [require_lic] [use_rope] [tie_emb] [inter_dim] [resume_ckpt] [min_lr]\"}" << std::endl;
                 return 1;
             }
             std::string ds = argv[2];
@@ -1643,7 +1869,12 @@ int main(int argc, char* argv[]) {
             uint32_t patience = argc > 16 ? std::stoul(argv[16]) : 6;
             uint64_t seed = argc > 17 ? std::stoull(argv[17]) : 42;
             bool reqLic = argc > 18 ? (std::stoi(argv[18]) != 0) : false;
-            return runPhase36Training(ds, bestCkpt, nbt, unseen, expId, steps, dim, layers, heads, vocab, seqLen, batch, accum, lr, patience, seed, reqLic, true);
+            bool useRope = argc > 19 ? (std::stoi(argv[19]) != 0) : false;
+            bool tieEmb = argc > 20 ? (std::stoi(argv[20]) != 0) : false;
+            uint32_t interDim = argc > 21 ? std::stoul(argv[21]) : 0;
+            std::string resumeCkpt = argc > 22 ? argv[22] : "";
+            float minLr = argc > 23 ? std::stof(argv[23]) : 1e-4f;
+            return runPhase36Training(ds, bestCkpt, nbt, unseen, expId, steps, dim, layers, heads, vocab, seqLen, batch, accum, lr, patience, seed, reqLic, true, useRope, tieEmb, interDim, resumeCkpt, minLr);
         }
 
         if (arg == "--eval-unseen-v2-json") {
@@ -1663,8 +1894,20 @@ int main(int argc, char* argv[]) {
         if (arg == "--test-tensor") {
             return runTensorTest();
         } else if (arg == "--tokenize" && argc > 2) {
-            NexaByteTokenizer tok;
-            auto tokens = tok.encode(argv[2]);
+            std::string nbtPath = argc > 3 ? argv[3] : "";
+            std::unique_ptr<Tokenizer> tok;
+            if (!nbtPath.empty()) {
+                auto bpe = std::make_unique<NexaBpeTokenizer>();
+                if (!bpe->load(nbtPath)) {
+                    std::cerr << "Error: Failed to load BPE tokenizer: " << nbtPath << std::endl;
+                    return 1;
+                }
+                tok = std::move(bpe);
+            } else {
+                tok = std::make_unique<NexaByteTokenizer>();
+            }
+            const bool addBos = nbtPath.empty();
+            auto tokens = tok->encode(argv[2], addBos, false);
             std::cout << "Tokens: [";
             for (size_t i = 0; i < tokens.size(); ++i) {
                 std::cout << tokens[i] << (i + 1 < tokens.size() ? ", " : "");
@@ -1672,17 +1915,23 @@ int main(int argc, char* argv[]) {
             std::cout << "]" << std::endl;
             return 0;
         } else if (arg == "--inspect" && argc > 2) {
+            auto val = NexaNanoModel::validateCheckpoint(argv[2]);
             auto meta = ModelLoader::inspectModel(argv[2]);
-            if (!meta.isValid) {
+            if (!val.valid && !meta.isValid) {
                 std::cerr << "Error: File is not a valid .nexa model format." << std::endl;
                 return 1;
             }
             std::cout << "Model Architecture: Transformer Decoder" << std::endl;
-            std::cout << "Hidden Dim: " << meta.header.dim << std::endl;
-            std::cout << "Layers: " << meta.header.nLayers << std::endl;
-            std::cout << "Heads: " << meta.header.nHeads << " (KV Heads: " << meta.header.nKvHeads << ")" << std::endl;
-            std::cout << "Tensors: " << meta.tensors.size() << std::endl;
-            std::cout << "Weight Bytes: " << meta.totalWeightBytes << std::endl;
+            std::cout << "Format Version: " << (val.valid ? val.version : meta.header.version) << std::endl;
+            std::cout << "Vocab Size: " << (val.valid ? val.config.vocabSize : meta.header.vocabSize) << std::endl;
+            std::cout << "Hidden Dim: " << (val.valid ? val.config.dim : meta.header.dim) << std::endl;
+            std::cout << "Intermediate Dim: " << (val.valid ? val.config.intermediateDim : meta.header.intermediateDim) << std::endl;
+            std::cout << "Layers: " << (val.valid ? val.config.nLayers : meta.header.nLayers) << std::endl;
+            std::cout << "Heads: " << (val.valid ? val.config.nHeads : meta.header.nHeads) << " (KV Heads: " << (meta.isValid ? meta.header.nKvHeads : val.config.nHeads) << ")" << std::endl;
+            std::cout << "Max Seq Len: " << (val.valid ? val.config.maxSeqLen : meta.header.maxSeqLen) << std::endl;
+            std::cout << "RoPE: " << (val.valid && val.config.useRope ? "enabled" : "disabled") << " | Tied Embeddings: " << (val.valid && val.config.tieEmbeddings ? "enabled" : "disabled") << std::endl;
+            std::cout << "Tensors: " << (val.valid ? val.tensorCount : meta.tensors.size()) << std::endl;
+            std::cout << "Weight Bytes: " << (val.valid ? val.totalWeightBytes : meta.totalWeightBytes) << std::endl;
             return 0;
         } else if (arg == "--test-training") {
             return NexaTrainer::runTrainingVerificationTests();
@@ -1717,7 +1966,12 @@ int main(int argc, char* argv[]) {
             uint32_t patience = argc > 16 ? std::stoul(argv[16]) : 6;
             uint64_t seed = argc > 17 ? std::stoull(argv[17]) : 42;
             bool reqLic = argc > 18 ? (std::stoi(argv[18]) != 0) : false;
-            return runPhase36Training(ds, bestCkpt, nbt, unseen, expId, steps, dim, layers, heads, vocab, seqLen, batch, accum, lr, patience, seed, reqLic, false);
+            bool useRope = argc > 19 ? (std::stoi(argv[19]) != 0) : false;
+            bool tieEmb = argc > 20 ? (std::stoi(argv[20]) != 0) : false;
+            uint32_t interDim = argc > 21 ? std::stoul(argv[21]) : 0;
+            std::string resumeCkpt = argc > 22 ? argv[22] : "";
+            float minLr = argc > 23 ? std::stof(argv[23]) : 1e-4f;
+            return runPhase36Training(ds, bestCkpt, nbt, unseen, expId, steps, dim, layers, heads, vocab, seqLen, batch, accum, lr, patience, seed, reqLic, false, useRope, tieEmb, interDim, resumeCkpt, minLr);
         } else if (arg == "--eval-unseen-v2") {
             std::string ckpt = argc > 2 ? argv[2] : "data/checkpoints/nexa_phase36_best.nexa";
             std::string nbt = argc > 3 ? argv[3] : "data/tokenizers/nexa_bpe_phase36.nbt";
@@ -1769,7 +2023,8 @@ int main(int argc, char* argv[]) {
             float topP = argc > 7 ? std::stof(argv[7]) : 0.9f;
             float repPenalty = argc > 8 ? std::stof(argv[8]) : 1.15f;
             uint64_t seed = argc > 9 ? std::stoull(argv[9]) : 42;
-            return runGeneration(ckpt, prompt, maxTokens, temp, topK, topP, repPenalty, seed, false);
+            std::string nbtPath = argc > 10 ? argv[10] : "";
+            return runGeneration(ckpt, prompt, maxTokens, temp, topK, topP, repPenalty, seed, false, nbtPath);
         } else if (arg == "--validate-checkpoint" && argc > 2) {
             return runCheckpointValidation(argv[2], false);
         } else if (arg == "--train-dataset" && argc > 2) {

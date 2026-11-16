@@ -367,12 +367,13 @@ void AutogradOps::embeddingBackward(
     }
 }
 
-float AutogradOps::crossEntropyForwardAndBackward(
+double AutogradOps::crossEntropyForwardAndBackwardSum(
     const Tensor& logits,
     const std::vector<int32_t>& targets,
     Tensor& gradLogits,
     Tensor& probsOut,
-    int32_t ignoreIndex
+    int32_t ignoreIndex,
+    uint64_t* outValidTokens
 ) {
     // logits: [N, V]
     const int64_t N = static_cast<int64_t>(targets.size());
@@ -384,15 +385,8 @@ float AutogradOps::crossEntropyForwardAndBackward(
 
     gradLogits.fillZero();
 
-    int64_t validCount = 0;
-    for (int64_t t = 0; t < N; ++t) {
-        if (targets[t] != ignoreIndex && targets[t] >= 0 && targets[t] < V) {
-            validCount++;
-        }
-    }
-
+    uint64_t validCount = 0;
     double totalLoss = 0.0;
-    const float invValid = validCount > 0 ? (1.0f / static_cast<float>(validCount)) : 0.0f;
 
     for (int64_t t = 0; t < N; ++t) {
         const float* lRow = lData + (t * V);
@@ -425,19 +419,47 @@ float AutogradOps::crossEntropyForwardAndBackward(
             continue;
         }
 
+        validCount++;
+
         // 4. Cross-entropy loss for target: -log(p_target)
         float pTarget = pRow[target];
         if (pTarget < 1e-12f) pTarget = 1e-12f;
         totalLoss += -std::log(static_cast<double>(pTarget));
 
-        // 5. Gradient: (p[v] - delta(v, target)) / validCount
+        // 5. Unnormalized gradient: (p[v] - delta(v, target))
         for (int64_t v = 0; v < V; ++v) {
             float indicator = (v == target) ? 1.0f : 0.0f;
-            glRow[v] = (pRow[v] - indicator) * invValid;
+            glRow[v] = pRow[v] - indicator;
         }
     }
 
-    return validCount > 0 ? static_cast<float>(totalLoss * invValid) : 0.0f;
+    if (outValidTokens) {
+        *outValidTokens = validCount;
+    }
+    return totalLoss;
+}
+
+float AutogradOps::crossEntropyForwardAndBackward(
+    const Tensor& logits,
+    const std::vector<int32_t>& targets,
+    Tensor& gradLogits,
+    Tensor& probsOut,
+    int32_t ignoreIndex
+) {
+    uint64_t validCount = 0;
+    double totalLoss = crossEntropyForwardAndBackwardSum(
+        logits, targets, gradLogits, probsOut, ignoreIndex, &validCount
+    );
+    if (validCount == 0) {
+        return 0.0f;
+    }
+    const float invValid = 1.0f / static_cast<float>(validCount);
+    float* glData = gradLogits.dataFloat();
+    const int64_t totalElems = gradLogits.numel();
+    for (int64_t i = 0; i < totalElems; ++i) {
+        glData[i] *= invValid;
+    }
+    return static_cast<float>(totalLoss * static_cast<double>(invValid));
 }
 
 float AutogradOps::computeGlobalGradNorm(const std::vector<GradTensor*>& params) {

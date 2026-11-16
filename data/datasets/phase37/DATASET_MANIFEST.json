@@ -1,0 +1,8 @@
+{
+  "name": "nexa-phase37-expanded-v2",
+  "version": "3.7-v2-1.0.0",
+  "source": "Original NEXA Project Phase 3.7 Authored Corpus (Expanded Curriculum)",
+  "license": "MIT",
+  "externalDownloads": false,
+  "unseenTestFile": "data/datasets/phase36/unseen_test_expanded.txt"
+}

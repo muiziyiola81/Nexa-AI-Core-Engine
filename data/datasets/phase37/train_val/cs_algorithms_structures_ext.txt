@@ -1,0 +1,134 @@
+User: What is a binary search tree?
+Assistant: A binary search tree is a rooted binary tree where every node holds keys greater than all keys in its left subtree and smaller than all keys in its right subtree.
+
+User: Why is hash table load factor important for performance?
+Assistant: When the ratio of stored items to table buckets grows too high, collisions increase sharply and lookup performance slows down until the array resizes.
+
+User: What is a stack overflow error in programming?
+Assistant: A stack overflow occurs when nested function calls or huge local stack allocations exhaust the bounded call stack memory assigned to a thread.
+
+User: How does dynamic array growth achieve amortized constant-time push?
+Assistant: Doubling array capacity whenever full spreads infrequent linear element copies over many cheap insertions, yielding O(1) amortized append cost.
+
+User: What is a trie prefix tree used for?
+Assistant: A trie stores strings character by character along shared root paths, making prefix autocomplete and dictionary word checks fast.
+
+User: What is an adjacency list in graph representation?
+Assistant: An adjacency list stores each vertex alongside a dynamic list of its outgoing neighbors, saving memory on sparse graphs compared to dense matrices.
+
+User: When is an adjacency matrix preferable to an adjacency list?
+Assistant: When graphs are dense or programs need constant-time edge existence checks between arbitrary pairs of nodes, an adjacency matrix excels.
+
+User: What does memoization do in recursive algorithms?
+Assistant: Memoization caches return values of expensive recursive calls keyed by arguments so repeated subproblems return immediately without recomputing.
+
+User: What is a greedy algorithm?
+Assistant: A greedy algorithm builds a solution step by step by picking the locally best choice at each stage, succeeding on problems with greedy-choice structure.
+
+User: Give an example where a greedy coin-change strategy fails.
+Assistant: With coin denominations 1, 3, and 4, making sum 6 greedily picks 4 plus 1 plus 1 for three coins, whereas two coins of 3 are optimal.
+
+User: What is a sliding window technique in array algorithms?
+Assistant: A sliding window tracks two index boundaries moving smoothly across a sequence to update subarray sums or counts incrementally in linear time.
+
+User: How does two-pointer search find a target sum in a sorted array?
+Assistant: Starting pointers at both ends and moving inward left or right based on whether the current sum is too small or too large runs in linear time.
+
+User: What is a union-find disjoint set data structure?
+Assistant: Union-find tracks non-overlapping groups efficiently with path compression and union by rank to test whether elements share a connected component.
+
+User: What is a minimum spanning tree of a weighted graph?
+Assistant: A minimum spanning tree connects all graph vertices using a cycle-free subset of edges whose total weight sum is as small as possible.
+
+User: How does topological ordering detect cycles in dependencies?
+Assistant: If Kahn's algorithm finishes removing zero-indegree nodes while vertices still remain unvisited, the dependency graph must contain a cycle.
+
+User: What is bit manipulation masking?
+Assistant: Bitwise AND, OR, and shift operators inspect, set, or clear individual binary flags packed tightly inside integer registers.
+
+User: Why are circular ring buffers popular in audio and logging queues?
+Assistant: A ring buffer reuses a fixed contiguous array with wrap-around head and tail indices, supporting fast producer-consumer queuing without heap allocations.
+
+User: What is a semaphore in concurrency?
+Assistant: A semaphore maintains an integer permit counter coordinating how many threads may simultaneously enter a bounded resource pool.
+
+User: How does optimistic concurrency differ from pessimistic locking?
+Assistant: Pessimistic locking acquires exclusive locks upfront before reading, whereas optimistic concurrency checks version numbers at commit time and retries on conflict.
+
+User: What is memory fragmentation?
+Assistant: Fragmentation splits free heap memory into tiny scattered gaps between live objects, preventing large contiguous allocations even when total free bytes look sufficient.
+
+User: How does garbage collection differ from manual memory management?
+Assistant: Garbage collection automatically reclaims unreachable heap objects at runtime, trading periodic scan overhead for freedom from manual delete bugs.
+
+User: What is reference counting in memory management?
+Assistant: Reference counting tracks how many owners point to an object and immediately frees it when the counter drops to zero, unless reference cycles exist.
+
+User: Why can cyclic references leak memory under naive reference counting?
+Assistant: Two objects pointing to each other keep positive reference counts even after external program code drops all handles to both objects.
+
+User: What is a system call in an operating system?
+Assistant: A system call is a controlled trap into kernel mode enabling user programs to request privileged file, network, or process operations safely.
+
+User: How does context switching allow multitasking on a single CPU core?
+Assistant: The OS kernel saves the running thread's CPU registers and program counter, restores another runnable thread's state, and swaps execution slices rapidly.
+
+User: What is a pipe in Unix shells?
+Assistant: A pipe connects the standard output byte stream of one command directly into the standard input of the next command for composable processing.
+
+User: What does chmod control on Unix filesystems?
+Assistant: The chmod command updates read, write, and execute permission bits for file owner, group members, and other system users.
+
+User: Why is input sanitization required before building SQL queries?
+Assistant: Unescaped user text pasted directly into SQL strings enables injection attacks; parameterized queries keep SQL structure strictly separate from data values.
+
+User: What is cross-site scripting in web security?
+Assistant: Cross-site scripting occurs when a web application renders untrusted user text as executable JavaScript inside another visitor's browser session.
+
+User: What is a TLS handshake?
+Assistant: A TLS handshake authenticates server identity with cryptographic certificates and negotiates shared symmetric session keys before encrypted application traffic begins.
+
+User: What is a reverse proxy server?
+Assistant: A reverse proxy sits in front of backend application servers to terminate TLS, balance request loads, cache static responses, and shield internal hosts.
+
+User: What is load balancing in distributed systems?
+Assistant: Load balancing spreads incoming client traffic across multiple healthy worker instances to improve throughput and avoid single-node overload.
+
+User: What does idempotency mean for network API requests?
+Assistant: An idempotent operation yields the exact same final system state whether a client sends the request once or retries it multiple times after a timeout.
+
+User: Why do distributed systems add exponential backoff with jitter on retries?
+Assistant: Increasing delay between retries avoids hammering overloaded servers, and random jitter prevents synchronized retry storms across clients.
+
+User: What is a message queue useful for in backend services?
+Assistant: A message queue decouples slow background jobs from fast user web requests so bursty traffic buffers smoothly without dropping tasks.
+
+User: What is normalization in relational database design?
+Assistant: Normalization organizes tables and keys to eliminate redundant duplicated facts and prevent partial update anomalies.
+
+User: When might engineers intentionally denormalize a database table?
+Assistant: Read-heavy analytics or low-latency feeds sometimes store precomputed summaries or duplicated columns to avoid expensive multi-table joins.
+
+User: What is an embedding similarity search?
+Assistant: Embedding search converts text or items into dense vectors and retrieves nearest neighbors with high cosine similarity or small Euclidean distance.
+
+User: Why does cosine similarity ignore vector magnitude?
+Assistant: Cosine similarity divides the dot product by both vector lengths, measuring strictly the angle and directional alignment between vectors.
+
+User: What is gradient accumulation useful for when RAM is constrained?
+Assistant: Summing gradients across small micro-batches before applying one optimizer step reproduces large-batch gradient directions within tight activation memory.
+
+User: What is a validation curve?
+Assistant: A validation curve plots training and held-out validation metrics over training steps or model capacity to reveal underfitting versus overfitting regimes.
+
+User: What does underfitting look like in loss curves?
+Assistant: Underfitting appears when both training loss and validation loss remain high and fail to capture clear structure in the dataset.
+
+User: Why does increasing clean, diverse training data often help more than enlarging a tiny model's layers?
+Assistant: Larger models memorize tiny datasets even faster, whereas richer clean data teaches broad vocabulary, varied phrasing, and reliable patterns without overfitting.
+
+User: What is perplexity's relationship to cross-entropy loss?
+Assistant: Perplexity equals e raised to the average cross-entropy loss in nats, translating log loss into an intuitive branching factor over vocabulary choices.
+
+User: Why does deterministic random seeding matter in machine learning experiments?
+Assistant: Fixing random seeds ensures identical weight initialization, batch shuffling order, and sampling draws so genuine code or data changes can be isolated cleanly.

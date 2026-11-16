@@ -133,33 +133,119 @@ NexaBpeTokenizer::NexaBpeTokenizer() {
 }
 
 namespace {
+
+bool isContractionAt(const std::string& text, size_t i, size_t& outLen) {
+    const size_t n = text.size();
+    if (i >= n || text[i] != '\'') return false;
+    if (i + 2 < n) {
+        char c1 = static_cast<char>(std::tolower(static_cast<unsigned char>(text[i + 1])));
+        char c2 = static_cast<char>(std::tolower(static_cast<unsigned char>(text[i + 2])));
+        bool nextAlpha = (i + 3 < n) && std::isalpha(static_cast<unsigned char>(text[i + 3]));
+        if (!nextAlpha && ((c1 == 'r' && c2 == 'e') || (c1 == 'v' && c2 == 'e') || (c1 == 'l' && c2 == 'l'))) {
+            outLen = 3;
+            return true;
+        }
+    }
+    if (i + 1 < n) {
+        char c1 = static_cast<char>(std::tolower(static_cast<unsigned char>(text[i + 1])));
+        bool nextAlpha = (i + 2 < n) && std::isalpha(static_cast<unsigned char>(text[i + 2]));
+        if (!nextAlpha && (c1 == 's' || c1 == 't' || c1 == 'm' || c1 == 'd')) {
+            outLen = 2;
+            return true;
+        }
+    }
+    return false;
+}
+
 std::vector<std::string> pretokenizeText(const std::string& text) {
     std::vector<std::string> chunks;
     size_t i = 0;
     const size_t n = text.size();
     while (i < n) {
-        if (text[i] == '\n' || text[i] == '\r') {
+        unsigned char c = static_cast<unsigned char>(text[i]);
+
+        // 1. Line breaks always stay isolated so turn boundaries encode consistently
+        if (c == '\n' || c == '\r') {
             chunks.emplace_back(1, text[i]);
             i++;
             continue;
         }
-        size_t start = i;
-        if (text[i] == ' ') {
+
+        // 2. English contractions ('s, 't, 're, 've, 'm, 'll, 'd)
+        size_t contrLen = 0;
+        if (isContractionAt(text, i, contrLen)) {
+            chunks.push_back(text.substr(i, contrLen));
+            i += contrLen;
+            continue;
+        }
+
+        // 3. Optional single leading space attached ONLY to ASCII letter words
+        if (c == ' ' && i + 1 < n && std::isalpha(static_cast<unsigned char>(text[i + 1]))) {
+            size_t start = i;
+            i += 2;
+            while (i < n && std::isalpha(static_cast<unsigned char>(text[i]))) {
+                i++;
+            }
+            chunks.push_back(text.substr(start, i - start));
+            continue;
+        }
+
+        // 4. ASCII letter words without leading space
+        if (std::isalpha(c)) {
+            size_t start = i;
             i++;
-        }
-        if (i < n && text[i] != ' ' && text[i] != '\n' && text[i] != '\r') {
-            while (i < n && text[i] != ' ' && text[i] != '\n' && text[i] != '\r') {
+            while (i < n && std::isalpha(static_cast<unsigned char>(text[i]))) {
                 i++;
             }
-        } else {
-            while (i < n && text[i] == ' ') {
+            chunks.push_back(text.substr(start, i - start));
+            continue;
+        }
+
+        // 5. Numbers split into short <= 3-digit runs for clean arithmetic tokenization
+        if (std::isdigit(c)) {
+            size_t start = i;
+            size_t count = 0;
+            while (i < n && count < 3 && std::isdigit(static_cast<unsigned char>(text[i]))) {
+                i++;
+                count++;
+            }
+            chunks.push_back(text.substr(start, i - start));
+            continue;
+        }
+
+        // 6. Contiguous horizontal whitespace runs (spaces/tabs)
+        if (c == ' ' || c == '\t') {
+            size_t start = i;
+            while (i < n && (text[i] == ' ' || text[i] == '\t')) {
+                // Leave a single space attached if it precedes an alphabetic word
+                if (text[i] == ' ' && i > start && i + 1 < n &&
+                    std::isalpha(static_cast<unsigned char>(text[i + 1]))) {
+                    break;
+                }
                 i++;
             }
+            chunks.push_back(text.substr(start, i - start));
+            continue;
         }
-        chunks.push_back(text.substr(start, i - start));
+
+        // 7. Non-ASCII UTF-8 sequence (consume full multi-byte codepoint if valid lead byte)
+        if ((c & 0x80) != 0) {
+            size_t start = i;
+            i++;
+            while (i < n && (static_cast<unsigned char>(text[i]) & 0xC0) == 0x80) {
+                i++;
+            }
+            chunks.push_back(text.substr(start, i - start));
+            continue;
+        }
+
+        // 8. Individual ASCII punctuation/symbol character
+        chunks.emplace_back(1, text[i]);
+        i++;
     }
     return chunks;
 }
+
 } // namespace
 
 void NexaBpeTokenizer::train(const std::string& corpusText, uint32_t targetVocabSize, uint32_t minFrequency) {
@@ -167,9 +253,10 @@ void NexaBpeTokenizer::train(const std::string& corpusText, uint32_t targetVocab
         return;
     }
 
-    // Build frequency map over pre-tokenized chunks for fast O(unique_chunks) BPE training
+    // Build frequency map over pre-tokenized chunks for fast BPE training
     auto rawChunks = pretokenizeText(corpusText);
     std::unordered_map<std::string, uint32_t> chunkCounts;
+    chunkCounts.reserve(rawChunks.size() / 4 + 16);
     for (const auto& c : rawChunks) {
         chunkCounts[c]++;
     }
@@ -190,29 +277,37 @@ void NexaBpeTokenizer::train(const std::string& corpusText, uint32_t targetVocab
         sequences.push_back(std::move(cs));
     }
 
-    // Iterative BPE pair frequency counting and merging
-    while (idToToken_.size() < targetVocabSize) {
-        std::unordered_map<uint64_t, uint32_t> pairFreq;
-        for (const auto& cs : sequences) {
-            if (cs.tokens.size() < 2) continue;
-            for (size_t i = 0; i + 1 < cs.tokens.size(); ++i) {
-                uint64_t key = makePairKey(cs.tokens[i], cs.tokens[i + 1]);
-                pairFreq[key] += cs.count;
+    // Maintain incremental pair frequencies and inverted sequence index
+    std::unordered_map<uint64_t, int64_t> pairFreq;
+    std::unordered_map<uint64_t, std::vector<size_t>> pairToSeqs;
+    pairFreq.reserve(sequences.size() * 2 + 64);
+    pairToSeqs.reserve(sequences.size() * 2 + 64);
+
+    for (size_t sIdx = 0; sIdx < sequences.size(); ++sIdx) {
+        const auto& toks = sequences[sIdx].tokens;
+        const int64_t cnt = static_cast<int64_t>(sequences[sIdx].count);
+        for (size_t i = 0; i + 1 < toks.size(); ++i) {
+            uint64_t key = makePairKey(toks[i], toks[i + 1]);
+            pairFreq[key] += cnt;
+            auto& vec = pairToSeqs[key];
+            if (vec.empty() || vec.back() != sIdx) {
+                vec.push_back(sIdx);
             }
         }
+    }
 
-        if (pairFreq.empty()) break;
-
+    // Iterative BPE pair selection and incremental merge updates
+    while (idToToken_.size() < targetVocabSize) {
         uint64_t bestPair = 0;
-        uint32_t bestCount = 0;
+        int64_t bestCount = 0;
         for (const auto& [pair, count] : pairFreq) {
-            if (count > bestCount) {
+            if (count > bestCount || (count == bestCount && count > 0 && pair < bestPair)) {
                 bestCount = count;
                 bestPair = pair;
             }
         }
 
-        if (bestCount < minFrequency) {
+        if (bestCount < static_cast<int64_t>(minFrequency)) {
             break;
         }
 
@@ -228,9 +323,22 @@ void NexaBpeTokenizer::train(const std::string& corpusText, uint32_t targetVocab
         merges_.push_back(mergeRule);
         mergeTable_[bestPair] = mergeRule;
 
-        // Apply merge over unique chunk sequences
-        for (auto& cs : sequences) {
+        std::vector<size_t> candidateSeqs;
+        auto ptIt = pairToSeqs.find(bestPair);
+        if (ptIt != pairToSeqs.end()) {
+            candidateSeqs = std::move(ptIt->second);
+            pairToSeqs.erase(ptIt);
+        }
+        pairFreq.erase(bestPair);
+
+        // Deduplicate candidate indices once
+        std::sort(candidateSeqs.begin(), candidateSeqs.end());
+        candidateSeqs.erase(std::unique(candidateSeqs.begin(), candidateSeqs.end()), candidateSeqs.end());
+
+        for (size_t sIdx : candidateSeqs) {
+            auto& cs = sequences[sIdx];
             if (cs.tokens.size() < 2) continue;
+
             bool changed = false;
             for (size_t i = 0; i + 1 < cs.tokens.size(); ++i) {
                 if (cs.tokens[i] == tokA && cs.tokens[i + 1] == tokB) {
@@ -240,6 +348,22 @@ void NexaBpeTokenizer::train(const std::string& corpusText, uint32_t targetVocab
             }
             if (!changed) continue;
 
+            const int64_t cnt = static_cast<int64_t>(cs.count);
+
+            // Subtract all previous pairs in this sequence
+            for (size_t i = 0; i + 1 < cs.tokens.size(); ++i) {
+                uint64_t oldKey = makePairKey(cs.tokens[i], cs.tokens[i + 1]);
+                if (oldKey == bestPair) continue;
+                auto fIt = pairFreq.find(oldKey);
+                if (fIt != pairFreq.end()) {
+                    fIt->second -= cnt;
+                    if (fIt->second <= 0) {
+                        pairFreq.erase(fIt);
+                    }
+                }
+            }
+
+            // Build merged sequence
             std::vector<int32_t> nextTokens;
             nextTokens.reserve(cs.tokens.size());
             for (size_t i = 0; i < cs.tokens.size(); ++i) {
@@ -251,6 +375,16 @@ void NexaBpeTokenizer::train(const std::string& corpusText, uint32_t targetVocab
                 }
             }
             cs.tokens = std::move(nextTokens);
+
+            // Add all new pairs in merged sequence
+            for (size_t i = 0; i + 1 < cs.tokens.size(); ++i) {
+                uint64_t newKey = makePairKey(cs.tokens[i], cs.tokens[i + 1]);
+                pairFreq[newKey] += cnt;
+                auto& vec = pairToSeqs[newKey];
+                if (vec.empty() || vec.back() != sIdx) {
+                    vec.push_back(sIdx);
+                }
+            }
         }
     }
 }

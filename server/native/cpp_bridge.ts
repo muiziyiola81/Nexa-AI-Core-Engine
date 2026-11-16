@@ -52,18 +52,28 @@ export interface CppForwardPassResult {
 
 export interface CppTokenizeResult {
   status: string;
+  tokenizer?: string;
+  vocab_size?: number;
   tokens: number[];
   count: number;
+  error?: string;
 }
 
 export interface CppInspectResult {
   status: string;
   valid: boolean;
+  version?: number;
   architecture: string;
+  vocab_size?: number;
   hidden_dim: number;
+  intermediate_dim?: number;
   layers: number;
   heads: number;
   kv_heads: number;
+  max_seq_len?: number;
+  rope_theta?: number;
+  use_rope?: boolean;
+  tie_embeddings?: boolean;
   tensors: number;
   weight_bytes: number;
 }
@@ -96,7 +106,12 @@ export interface CppGenerationResult {
   prompt: string;
   generated_text: string;
   full_text: string;
+  prompt_tokens?: number;
   tokens_generated: number;
+  max_seq_len?: number;
+  vocab_size?: number;
+  use_rope?: boolean;
+  tie_embeddings?: boolean;
   duration_ms: number;
   tokens_per_second: number;
   finish_reason: string;
@@ -110,8 +125,14 @@ export interface CppCheckpointValidationResult {
   arch_type: number;
   vocab_size: number;
   dim: number;
+  intermediate_dim?: number;
   layers: number;
   heads: number;
+  max_seq_len?: number;
+  rope_theta?: number;
+  use_rope?: boolean;
+  tie_embeddings?: boolean;
+  tokenizer_hash?: number;
   tensors: number;
   weight_bytes: number;
   step: number;
@@ -181,7 +202,12 @@ export interface CppQaAnswerResult {
   prompt: string;
   answer: string;
   full_text: string;
+  prompt_tokens?: number;
   tokens_generated: number;
+  max_seq_len?: number;
+  vocab_size?: number;
+  use_rope?: boolean;
+  tie_embeddings?: boolean;
   duration_ms: number;
   tokens_per_second: number;
   finish_reason: string;
@@ -329,6 +355,10 @@ export interface CppPhase36TrainResult {
   license_verified: boolean;
   total_parameters: number;
   vocab_size: number;
+  intermediate_dim?: number;
+  max_seq_len?: number;
+  use_rope?: boolean;
+  tie_embeddings?: boolean;
   documents: number;
   examples: number;
   bytes: number;
@@ -617,12 +647,22 @@ export class NexaCppBridge {
   }
 
   /**
-   * Encodes text into tokens using C++ NexaByteTokenizer.
+   * Encodes text into tokens using C++ NexaBpeTokenizer (if tokenizerPath supplied) or NexaByteTokenizer.
    */
-  public async tokenize(text: string): Promise<number[]> {
-    const res = await this.executeCommand<CppTokenizeResult>(['--tokenize-json', text]);
+  public async tokenize(text: string, tokenizerPath?: string): Promise<number[]> {
+    const args = ['--tokenize-json', text];
+    if (tokenizerPath) {
+      const resolvedTok = path.isAbsolute(tokenizerPath)
+        ? tokenizerPath
+        : path.resolve(process.cwd(), tokenizerPath);
+      args.push(resolvedTok);
+    }
+    const res = await this.executeCommand<CppTokenizeResult>(args);
     if (res.status !== 'ok' || !Array.isArray(res.tokens)) {
-      throw new NexaNativeCppError('C++ tokenizer returned unexpected payload', 'ERR_TOKENIZER_INVALID_PAYLOAD');
+      throw new NexaNativeCppError(
+        res.error || 'C++ tokenizer returned unexpected payload',
+        'ERR_TOKENIZER_INVALID_PAYLOAD'
+      );
     }
     return res.tokens;
   }
@@ -673,6 +713,7 @@ export class NexaCppBridge {
       topP?: number;
       repetitionPenalty?: number;
       seed?: number;
+      tokenizerPath?: string;
     }
   ): Promise<CppGenerationResult> {
     const resolved = path.isAbsolute(checkpointPath) ? checkpointPath : path.resolve(process.cwd(), checkpointPath);
@@ -683,7 +724,7 @@ export class NexaCppBridge {
     const repPenalty = options?.repetitionPenalty ?? 1.15;
     const seed = options?.seed ?? 42;
 
-    return this.executeCommand<CppGenerationResult>([
+    const args = [
       '--generate-json',
       resolved,
       prompt,
@@ -693,7 +734,16 @@ export class NexaCppBridge {
       String(topP),
       String(repPenalty),
       String(seed)
-    ]);
+    ];
+
+    if (options?.tokenizerPath) {
+      const resolvedTok = path.isAbsolute(options.tokenizerPath)
+        ? options.tokenizerPath
+        : path.resolve(process.cwd(), options.tokenizerPath);
+      args.push(resolvedTok);
+    }
+
+    return this.executeCommand<CppGenerationResult>(args, 30000);
   }
 
   /**
@@ -815,15 +865,18 @@ export class NexaCppBridge {
       ? (path.isAbsolute(options.tokenizerPath) ? options.tokenizerPath : path.resolve(process.cwd(), options.tokenizerPath))
       : path.resolve(process.cwd(), 'data', 'tokenizers', 'nexa_bpe_qa.nbt');
 
-    return this.executeCommand<CppQaAnswerResult>([
-      '--answer-json',
-      ckpt,
-      question,
-      nbt,
-      String(options?.maxTokens ?? 32),
-      String(options?.temperature ?? 0.5),
-      String(options?.seed ?? 42)
-    ]);
+    return this.executeCommand<CppQaAnswerResult>(
+      [
+        '--answer-json',
+        ckpt,
+        question,
+        nbt,
+        String(options?.maxTokens ?? 48),
+        String(options?.temperature ?? 0.5),
+        String(options?.seed ?? 42)
+      ],
+      30000
+    );
   }
 
   /**
@@ -1000,6 +1053,11 @@ export class NexaCppBridge {
     earlyStopPatience?: number;
     seed?: number;
     requireVerifiedLicense?: boolean;
+    useRope?: boolean;
+    tieEmbeddings?: boolean;
+    intermediateDim?: number;
+    resumeCheckpointPath?: string;
+    minLr?: number;
   }): Promise<CppPhase36TrainResult> {
     const ds = path.isAbsolute(options.datasetPath)
       ? options.datasetPath
@@ -1018,6 +1076,11 @@ export class NexaCppBridge {
       ? (path.isAbsolute(options.unseenQuestionsPath)
         ? options.unseenQuestionsPath
         : path.resolve(process.cwd(), options.unseenQuestionsPath))
+      : '';
+    const resumeCkpt = options.resumeCheckpointPath
+      ? (path.isAbsolute(options.resumeCheckpointPath)
+        ? options.resumeCheckpointPath
+        : path.resolve(process.cwd(), options.resumeCheckpointPath))
       : '';
 
     return this.executeCommand<CppPhase36TrainResult>(
@@ -1039,9 +1102,14 @@ export class NexaCppBridge {
         String(options.lr ?? 0.0025),
         String(options.earlyStopPatience ?? 6),
         String(options.seed ?? 42),
-        options.requireVerifiedLicense ? '1' : '0'
+        options.requireVerifiedLicense ? '1' : '0',
+        options.useRope ? '1' : '0',
+        options.tieEmbeddings ? '1' : '0',
+        String(options.intermediateDim ?? 0),
+        resumeCkpt,
+        String(options.minLr ?? 0.0001)
       ],
-      300000
+      900000
     );
   }
 

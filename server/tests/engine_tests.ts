@@ -19,6 +19,7 @@ import { runGenerationIntegrationTests } from './generation_tests.js';
 import { runQaIntegrationTests } from './qa_tests.js';
 import { runPhase35IntegrationTests } from './phase35_tests.js';
 import { runPhase36IntegrationTests } from './phase36_tests.js';
+import { runPhase37IntegrationTests } from './phase37_tests.js';
 import { runCloudRunDeploymentTests } from './cloudrun_tests.js';
 
 export interface TestCaseResult {
@@ -360,7 +361,11 @@ export async function runAutomatedTests(deps: {
   const phase36Results = await runPhase36IntegrationTests();
   results.push(...phase36Results);
 
-  // 18. Run Cloud Run Deployment Readiness Test Suite
+  // 18. Run Phase 3.7 RoPE, Tied Embeddings, BPE & Multi-Turn Inference Test Suite
+  const phase37Results = await runPhase37IntegrationTests();
+  results.push(...phase37Results);
+
+  // 19. Run Cloud Run Deployment Readiness Test Suite
   const cloudRunResults = await runCloudRunDeploymentTests();
   results.push(...cloudRunResults);
 

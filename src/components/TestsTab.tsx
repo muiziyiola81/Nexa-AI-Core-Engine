@@ -7,7 +7,11 @@ import React, { useState } from 'react';
 import { TestSuiteReport } from '../types';
 import { Play, CheckCircle2, XCircle, RefreshCw, Terminal, Check } from 'lucide-react';
 
-export const TestsTab: React.FC = () => {
+interface TestsTabProps {
+  apiKey?: string;
+}
+
+export const TestsTab: React.FC<TestsTabProps> = ({ apiKey }) => {
   const [isRunning, setIsRunning] = useState(false);
   const [report, setReport] = useState<TestSuiteReport | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -16,7 +20,11 @@ export const TestsTab: React.FC = () => {
     setIsRunning(true);
     setErrorMsg(null);
     try {
-      const res = await fetch('/v1/tests/run', { method: 'POST' });
+      const headers: Record<string, string> = {};
+      if (apiKey) {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+      }
+      const res = await fetch('/v1/tests/run', { method: 'POST', headers });
       if (!res.ok) throw new Error(`Test execution failed with HTTP ${res.status}`);
       const data = await res.json();
       setReport(data);

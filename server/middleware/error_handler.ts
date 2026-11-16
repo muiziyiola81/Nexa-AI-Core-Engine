@@ -6,14 +6,21 @@
 import { Request, Response, NextFunction } from 'express';
 
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
-  const error = err as Error;
+  const error = err as Error & { status?: number; type?: string; code?: string };
   const message = error.message || 'An internal error occurred in the NEXA Core Engine.';
 
   let statusCode = 500;
   let code = 'internal_server_error';
   let type = 'server_error';
 
-  if (message.includes('[NEXA_ERR_MODEL_NOT_FOUND]')) {
+  if (
+    (error instanceof SyntaxError && error.status === 400) ||
+    error.type === 'entity.parse.failed'
+  ) {
+    statusCode = 400;
+    code = 'invalid_json';
+    type = 'invalid_request_error';
+  } else if (message.includes('[NEXA_ERR_MODEL_NOT_FOUND]')) {
     statusCode = 404;
     code = 'model_not_found';
     type = 'invalid_request_error';
@@ -21,13 +28,21 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     statusCode = 400;
     code = 'model_not_loaded';
     type = 'invalid_request_error';
+  } else if (message.includes('[NEXA_ERR_BAD_REQUEST]')) {
+    statusCode = 400;
+    code = 'invalid_request';
+    type = 'invalid_request_error';
   } else if (message.includes('[NEXA_ERR_MAX_CONCURRENCY]')) {
     statusCode = 503;
     code = 'server_overloaded';
     type = 'server_error';
-  } else if (message.includes('[NEXA_ERR_MODEL_LOAD_FAILED]')) {
+  } else if (message.includes('[NEXA_ERR_MODEL_LOAD_FAILED]') || message.includes('ERR_TOKENIZER_MISSING') || message.includes('ERR_CPP_BINARY_UNAVAILABLE')) {
     statusCode = 503;
     code = 'model_load_failed';
+    type = 'server_error';
+  } else if (message.includes('ERR_CPP_EXEC_TIMEOUT')) {
+    statusCode = 504;
+    code = 'inference_timeout';
     type = 'server_error';
   } else if (message.includes('Hardware Load Error')) {
     statusCode = 400;

@@ -185,8 +185,15 @@ export async function runCloudRunDeploymentTests(): Promise<TestCaseResult[]> {
       if (!chatJson.id?.startsWith('chatcmpl-nexa-cxx-')) {
         throw new Error(`Unexpected response ID: ${chatJson.id}`);
       }
-      if (!chatJson.choices?.[0]?.message?.content?.includes('C++20 COMPILED ENGINE')) {
-        throw new Error('Response missing native C++20 runtime signature.');
+      const replyContent = chatJson.choices?.[0]?.message?.content;
+      if (typeof replyContent !== 'string' || replyContent.trim().length === 0) {
+        throw new Error('Expected non-empty generated response from nexa-p36-tier3.');
+      }
+      if (replyContent.includes('C++20 COMPILED ENGINE')) {
+        throw new Error('v2 checkpoint chat completion leaked internal telemetry notice.');
+      }
+      if (!chatJson.usage?.prompt_tokens || chatJson.usage.prompt_tokens <= 0) {
+        throw new Error('Expected positive prompt_tokens usage metadata.');
       }
 
       // Test on-demand load recovery after cold container start on nexa-nano-step-40 (not in AUTO_LOAD_MODELS)

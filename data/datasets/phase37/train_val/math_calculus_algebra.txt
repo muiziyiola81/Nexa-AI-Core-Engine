@@ -1,0 +1,104 @@
+User: What is the quadratic formula used to solve ax squared plus bx plus c equals zero?
+Assistant: Solutions equal minus b plus or minus the square root of b squared minus 4ac, all divided by 2a.
+
+User: How do you factor x squared minus 9?
+Assistant: Recognizing a difference of squares produces the factors (x minus 3) multiplied by (x plus 3).
+
+User: Solve the system x + y = 10 and x - y = 4.
+Assistant: Adding both equations gives 2x = 14 so x = 7, and substituting back yields y = 3.
+
+User: What is the slope-intercept equation of a line?
+Assistant: Writing y = mx + b directly shows the line's slope m and the point b where it crosses the vertical y-axis.
+
+User: When are two lines perpendicular in the coordinate plane?
+Assistant: Two non-vertical lines are perpendicular when the product of their slopes equals negative one.
+
+User: What is the surface area of a cube with side length 3?
+Assistant: Each of the six square faces has area 9, so total surface area equals 6 times 9, which is 54 square units.
+
+User: What is the volume of a cylinder?
+Assistant: Multiply the circular base area pi times radius squared by the cylinder's height.
+
+User: How do you convert radians into degrees?
+Assistant: Multiply radians by 180 and divide by pi, since pi radians equals 180 degrees.
+
+User: What is the sine of 30 degrees?
+Assistant: In a 30-60-90 right triangle, the side opposite 30 degrees is half the hypotenuse, so sine of 30 degrees equals 0.5.
+
+User: What does the Pythagorean trigonometric identity state?
+Assistant: For any real angle theta, sine squared of theta plus cosine squared of theta always equals 1.
+
+User: What is a geometric sequence?
+Assistant: A geometric sequence multiplies each term by a constant common ratio to generate the following term.
+
+User: What is an arithmetic sequence?
+Assistant: An arithmetic sequence adds a constant common difference between every pair of consecutive terms.
+
+User: Compute the sum of the integers from 1 through 10.
+Assistant: Pairing opposite ends gives five pairs summing to 11 each, so the total sum is 55.
+
+User: What is conditional probability?
+Assistant: Conditional probability measures the likelihood that event A happens given that related event B is already known to have occurred.
+
+User: State Bayes' theorem conceptually.
+Assistant: Bayes' theorem updates our prior probability of a hypothesis cleanly after observing new diagnostic evidence and its likelihood.
+
+User: What does expected value mean for a random variable?
+Assistant: Expected value is the long-run weighted average outcome obtained by multiplying every possible value by its probability and summing.
+
+User: Why is correlation not proof of causation?
+Assistant: Two quantities may move together because a hidden third variable drives both, or purely by coincidence without one causing the other.
+
+User: What is matrix addition?
+Assistant: Matrices of identical row and column dimensions are added elementwise by summing entries at matching row and column positions.
+
+User: What is an identity matrix?
+Assistant: An identity matrix is a square matrix with ones down its main diagonal and zeros everywhere else, leaving any multiplied vector unchanged.
+
+User: What does an eigenvalue and eigenvector represent for a linear transformation?
+Assistant: An eigenvector points along a special direction that a matrix stretches or flips without rotating off its span, scaled by its eigenvalue.
+
+User: Why can a matrix with zero determinant not be inverted?
+Assistant: A zero determinant means the matrix squashes space onto a lower dimension, collapsing distinct inputs together so no unique inverse exists.
+
+User: What is the derivative of sine of x?
+Assistant: The instantaneous rate of change of sin(x) with respect to x is cos(x).
+
+User: What is the derivative of cosine of x?
+Assistant: Differentiating cos(x) with respect to x gives negative sin(x).
+
+User: What does the chain rule do in calculus?
+Assistant: The chain rule computes the derivative of nested composite functions by multiplying the outer derivative by the inner function's derivative.
+
+User: Why is the chain rule central to backpropagation in neural networks?
+Assistant: Backpropagation applies the chain rule layer by layer backward from scalar loss to compute exact weight gradients efficiently.
+
+User: What is a local minimum of a smooth function?
+Assistant: A local minimum is a point where the function value is lower than at all nearby neighbors and its first derivative vanishes.
+
+User: What does the second derivative tell you about a curve?
+Assistant: The second derivative measures concavity and how fast the slope itself bends upward or downward.
+
+User: Compute 18 divided by 0.5.
+Assistant: Dividing by one half is identical to multiplying by two, which gives 36.
+
+User: What percentage increase is going from 40 to 50?
+Assistant: The increase of 10 divided by the original 40 equals 0.25, or a 25 percent increase.
+
+User: What is a prime number greater than 20 and less than 25?
+Assistant: Twenty-three is prime because no integer between 2 and 4 divides it evenly.
+
+User: How many subsets does a set with 4 elements have?
+Assistant: Each element can independently be included or excluded, yielding 2 raised to the fourth power, or 16 subsets.
+
+User: What is modular arithmetic?
+Assistant: Modular arithmetic wraps integers around a fixed modulus like a 12-hour clock, keeping only the remainder after division.
+
+User: What is 27 modulo 5?
+Assistant: Dividing 27 by 5 gives quotient 5 with remainder 2, so 27 modulo 5 equals 2.
+
+User: How do you verify whether three lengths can form a triangle?
+Assistant: By the triangle inequality, the sum of the two shorter side lengths must be strictly greater than the longest side.
+
+User: What is an isosceles triangle?
+Assistant: An isosceles triangle has at least two sides of equal length and two matching base angles opposite those sides.

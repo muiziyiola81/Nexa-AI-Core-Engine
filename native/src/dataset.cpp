@@ -811,19 +811,18 @@ DatasetQualityReport DatasetPipeline::analyzeAndFilterBlocks(
             }
         }
 
-        // Accepted!
+        // Accepted! (rejected blocks have already skipped via continue; if !filterFailed, caller may collect all valid blocks)
+        (void)filterFailed;
         size_t accIdx = outAcceptedBlocks.size();
-        if (filterFailed || true) {
-            outAcceptedBlocks.push_back(blk);
-            AcceptedRecord rec;
-            rec.blockNgrams = std::move(blkShingles);
-            rec.qNgrams = std::move(qShingles);
-            rec.firstQuestion = primaryQuestion;
-            rec.firstAnswer = primaryAnswer;
-            for (uint64_t h : rec.blockNgrams) ngramToAccepted[h].push_back(accIdx);
-            for (uint64_t h : rec.qNgrams) qNgramToAccepted[h].push_back(accIdx);
-            acceptedMeta.push_back(std::move(rec));
-        }
+        outAcceptedBlocks.push_back(blk);
+        AcceptedRecord rec;
+        rec.blockNgrams = std::move(blkShingles);
+        rec.qNgrams = std::move(qShingles);
+        rec.firstQuestion = primaryQuestion;
+        rec.firstAnswer = primaryAnswer;
+        for (uint64_t h : rec.blockNgrams) ngramToAccepted[h].push_back(accIdx);
+        for (uint64_t h : rec.qNgrams) qNgramToAccepted[h].push_back(accIdx);
+        acceptedMeta.push_back(std::move(rec));
     }
 
     report.acceptedBlocks = static_cast<uint32_t>(outAcceptedBlocks.size());
@@ -1445,11 +1444,19 @@ bool DatasetPipeline::loadInstructionExamplesFromFiles(
         tokens.push_back(tokenizer.specialTokens().bosId);
         trainMask.push_back(false);
 
+        std::vector<size_t> turnStartTokenIndices;
+        turnStartTokenIndices.push_back(0); // Turn 0 starts cleanly at BOS
+
         std::istringstream bStream(block);
         std::string line;
+        bool isFirstUserTurn = true;
         while (std::getline(bStream, line)) {
             if (line.empty()) continue;
             if (maskPrompts && rb.isInstructionFormat && line.rfind("User:", 0) == 0) {
+                if (!isFirstUserTurn) {
+                    turnStartTokenIndices.push_back(tokens.size());
+                }
+                isFirstUserTurn = false;
                 auto enc = tokenizer.encode(line + "\n", false, false);
                 for (int32_t t : enc) {
                     tokens.push_back(t);
@@ -1493,6 +1500,7 @@ bool DatasetPipeline::loadInstructionExamplesFromFiles(
         size_t stepStride = std::max(size_t(1), static_cast<size_t>(seqLen / 2));
 
         auto emitWindow = [&](size_t start, size_t len) {
+            if (len == 0) return;
             SequenceSample s;
             s.inputs.reserve(len);
             s.targets.reserve(len);
@@ -1519,6 +1527,34 @@ bool DatasetPipeline::loadInstructionExamplesFromFiles(
 
         if (totalPairs <= seqLen) {
             emitWindow(0, totalPairs);
+        } else if (rb.isInstructionFormat && turnStartTokenIndices.size() > 1) {
+            // Align windows to clean User: turn starts rather than cutting mid-Assistant answer
+            size_t maxCoveredEnd = 0;
+            for (size_t tIdx = 0; tIdx < turnStartTokenIndices.size(); ++tIdx) {
+                size_t tStart = turnStartTokenIndices[tIdx];
+                if (tStart >= totalPairs) break;
+                size_t nextTurnStart = (tIdx + 1 < turnStartTokenIndices.size())
+                    ? std::min(totalPairs, turnStartTokenIndices[tIdx + 1])
+                    : totalPairs;
+                if (tStart + seqLen <= maxCoveredEnd && nextTurnStart <= maxCoveredEnd) {
+                    continue; // Already fully contained in the previous multi-turn window
+                }
+                if (nextTurnStart - tStart <= seqLen) {
+                    size_t len = std::min(static_cast<size_t>(seqLen), totalPairs - tStart);
+                    emitWindow(tStart, len);
+                    maxCoveredEnd = std::max(maxCoveredEnd, tStart + len);
+                } else {
+                    // Single very long turn: step within this turn starting from its User: header
+                    size_t pos = tStart;
+                    while (pos < nextTurnStart) {
+                        size_t len = std::min(static_cast<size_t>(seqLen), totalPairs - pos);
+                        emitWindow(pos, len);
+                        maxCoveredEnd = std::max(maxCoveredEnd, pos + len);
+                        if (pos + len >= nextTurnStart) break;
+                        pos += stepStride;
+                    }
+                }
+            }
         } else {
             size_t pos = 0;
             while (pos < totalPairs) {

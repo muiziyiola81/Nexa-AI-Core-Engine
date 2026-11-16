@@ -344,9 +344,10 @@ EvaluationResult NexaTrainer::evaluateModel(
         return res;
     }
 
-    double totalLoss = 0.0;
+    double totalLossSum = 0.0;
     uint32_t validSeqs = 0;
-    uint32_t totalTokens = 0;
+    uint64_t totalValidTokens = 0;
+    uint64_t totalInputTokens = 0;
 
     for (const auto& sample : valSequences) {
         Tensor logits;
@@ -354,16 +355,20 @@ EvaluationResult NexaTrainer::evaluateModel(
 
         Tensor gradLogits(logits.shape());
         Tensor probs(logits.shape());
-        float loss = AutogradOps::crossEntropyForwardAndBackward(logits, sample.targets, gradLogits, probs, ignoreIndex);
+        uint64_t seqValid = 0;
+        double seqNllSum = AutogradOps::crossEntropyForwardAndBackwardSum(
+            logits, sample.targets, gradLogits, probs, ignoreIndex, &seqValid
+        );
 
-        totalLoss += static_cast<double>(loss);
+        totalLossSum += seqNllSum;
+        totalValidTokens += seqValid;
         validSeqs++;
-        totalTokens += static_cast<uint32_t>(sample.inputs.size());
+        totalInputTokens += static_cast<uint64_t>(sample.inputs.size());
     }
 
     res.sequencesEvaluated = validSeqs;
-    res.tokensEvaluated = totalTokens;
-    res.validationLoss = validSeqs > 0 ? static_cast<float>(totalLoss / validSeqs) : 0.0f;
+    res.tokensEvaluated = static_cast<uint32_t>(totalValidTokens > 0 ? totalValidTokens : totalInputTokens);
+    res.validationLoss = totalValidTokens > 0 ? static_cast<float>(totalLossSum / static_cast<double>(totalValidTokens)) : 0.0f;
     res.perplexity = std::exp(std::min(20.0f, res.validationLoss));
 
     auto t1 = std::chrono::high_resolution_clock::now();
@@ -544,6 +549,7 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
     optCfg.maxGradNorm = config.maxGradNorm;
     AdamW optimizer(model.getParameters(), optCfg);
 
+    uint64_t resumedStep = 0;
     if (!config.resumeFromCheckpoint.empty()) {
         std::cout << "[TRAINER] Resuming from checkpoint: " << config.resumeFromCheckpoint << std::endl;
         uint64_t loadedStep = 0;
@@ -554,6 +560,7 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
             result.errorMessage = "Failed to resume from checkpoint: " + loadErr;
             return result;
         }
+        resumedStep = loadedStep;
         std::cout << "[TRAINER] Successfully resumed at step " << loadedStep << " (previous loss: " << loadedLoss << ")" << std::endl;
     }
 
@@ -575,7 +582,7 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
     result.initialPerplexity = initialEval.perplexity;
     result.bestValLoss = initialEval.validationLoss;
     result.bestPerplexity = initialEval.perplexity;
-    result.bestCheckpointStep = 0;
+    result.bestCheckpointStep = static_cast<uint32_t>(resumedStep);
 
     std::string bestCkptPath = config.bestCheckpointPath.empty() ? config.checkpointPath : config.bestCheckpointPath;
     result.bestCheckpointPath = bestCkptPath;
@@ -598,7 +605,7 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
 
     std::vector<size_t> order(trainSeqs.size());
     std::iota(order.begin(), order.end(), 0);
-    std::mt19937_64 shuffleRng(config.seed);
+    std::mt19937_64 shuffleRng(config.seed + resumedStep);
     if (config.shuffleBatches) {
         std::shuffle(order.begin(), order.end(), shuffleRng);
     }
@@ -608,13 +615,17 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
     uint32_t evalsWithoutImprove = 0;
     uint32_t stepsExecuted = 0;
     int64_t totalTokensTrained = 0;
+    bool bestSavedDuringRun = false;
 
     std::cout << "\n================================================================" << std::endl;
     std::cout << "     NEXA-1 NANO ADVANCED MULTI-BATCH TRAINING PIPELINE          " << std::endl;
     std::cout << "================================================================" << std::endl;
     std::cout << "Model: " << model.totalParameters() << " params | Vocab: " << model.config.vocabSize
-              << " | Dim: " << model.config.dim << " | Layers: " << model.config.nLayers
-              << " | Heads: " << model.config.nHeads << " | Ctx: " << model.config.maxSeqLen << std::endl;
+              << " | Dim: " << model.config.dim << " | Inter: " << model.config.intermediateDim
+              << " | Layers: " << model.config.nLayers << " | Heads: " << model.config.nHeads
+              << " | Ctx: " << model.config.maxSeqLen
+              << " | RoPE: " << (model.config.useRope ? "ON" : "OFF")
+              << " | Tied: " << (model.config.tieEmbeddings ? "ON" : "OFF") << std::endl;
     std::cout << "Dataset: " << dataset.metadata().sourceFiles.size() << " files, "
               << dataset.metadata().totalTokens << " tokens, "
               << dataset.metadata().exampleCount << " examples ("
@@ -638,8 +649,9 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
         float currentLr = lrSchedule.getLr(step);
         optimizer.zeroGrad();
 
-        float stepLossSum = 0.0f;
-        uint32_t stepSamples = 0;
+        double stepLossSum = 0.0;
+        uint64_t stepValidTokens = 0;
+        uint64_t stepInputTokens = 0;
 
         for (uint32_t a = 0; a < gradAccum; ++a) {
             for (uint32_t b = 0; b < batchSize; ++b) {
@@ -652,33 +664,36 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
                 const auto& sample = trainSeqs[order[seqCursor++]];
 
                 ModelActivations act;
-                float loss = model.forwardAndLoss(sample.inputs, sample.targets, act, config.ignoreIndex);
-                stepLossSum += loss;
-                stepSamples++;
-                totalTokensTrained += static_cast<int64_t>(sample.inputs.size());
+                uint64_t seqValid = 0;
+                double seqNll = model.forwardAndLossSum(sample.inputs, sample.targets, act, config.ignoreIndex, &seqValid);
+                stepLossSum += seqNll;
+                stepValidTokens += seqValid;
+                stepInputTokens += static_cast<uint64_t>(sample.inputs.size());
             }
         }
 
-        if (stepSamples > 1) {
-            AutogradOps::scaleGradients(model.getParameters(), 1.0f / static_cast<float>(stepSamples));
+        if (stepValidTokens > 0) {
+            AutogradOps::scaleGradients(model.getParameters(), 1.0f / static_cast<float>(stepValidTokens));
         }
 
-        float stepLoss = stepLossSum / static_cast<float>(stepSamples);
+        float stepLoss = stepValidTokens > 0 ? static_cast<float>(stepLossSum / static_cast<double>(stepValidTokens)) : 0.0f;
         currentTrainLoss = stepLoss;
         stepsExecuted = step;
+        totalTokensTrained += static_cast<int64_t>(stepInputTokens);
 
         if (step == 1) {
             result.initialTrainLoss = stepLoss;
         }
 
         float gradNorm = optimizer.step(currentLr);
+        uint64_t globalStep = resumedStep + static_cast<uint64_t>(step);
 
         bool isEvalStep = (step == 1 || (config.evalInterval > 0 && step % config.evalInterval == 0) || step == totalSteps);
         if (isEvalStep) {
             auto eval = evaluateModel(model, valSeqs, config.ignoreIndex);
 
             EvalPoint pt;
-            pt.step = step;
+            pt.step = static_cast<uint32_t>(globalStep);
             pt.lr = currentLr;
             pt.trainLoss = stepLoss;
             pt.valLoss = eval.validationLoss;
@@ -686,7 +701,7 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
             pt.gradNorm = gradNorm;
             result.evalHistory.push_back(pt);
 
-            std::cout << std::setw(6) << step << " | "
+            std::cout << std::setw(6) << globalStep << " | "
                       << std::setw(10) << std::scientific << std::setprecision(2) << currentLr << " | "
                       << std::setw(11) << std::fixed << std::setprecision(4) << stepLoss << " | "
                       << std::setw(11) << std::fixed << std::setprecision(4) << eval.validationLoss << " | "
@@ -696,9 +711,10 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
             if (eval.validationLoss < result.bestValLoss - 1e-4f) {
                 result.bestValLoss = eval.validationLoss;
                 result.bestPerplexity = eval.perplexity;
-                result.bestCheckpointStep = step;
+                result.bestCheckpointStep = static_cast<uint32_t>(globalStep);
                 evalsWithoutImprove = 0;
-                model.saveCheckpoint(bestCkptPath, step, eval.validationLoss, &optimizer);
+                model.saveCheckpoint(bestCkptPath, globalStep, eval.validationLoss, &optimizer);
+                bestSavedDuringRun = true;
                 std::cout << " [BEST]";
             } else if (step > config.warmupSteps) {
                 evalsWithoutImprove++;
@@ -711,14 +727,15 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
 
             if (config.earlyStopPatience > 0 && evalsWithoutImprove >= config.earlyStopPatience && step > config.warmupSteps) {
                 result.overfittingDetected = true;
-                std::cout << "[TRAINER] Early stopping triggered at step " << step
+                std::cout << "[TRAINER] Early stopping triggered at step " << globalStep
                           << " (best val loss " << result.bestValLoss << " at step " << result.bestCheckpointStep << ")" << std::endl;
                 break;
             }
         }
     }
 
-    result.totalSteps = stepsExecuted;
+    uint64_t finalGlobalStep = resumedStep + static_cast<uint64_t>(stepsExecuted);
+    result.totalSteps = finalGlobalStep;
     result.totalTokensTrained = totalTokensTrained;
     result.finalTrainLoss = currentTrainLoss;
 
@@ -726,7 +743,7 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
     result.finalValLoss = finalEval.validationLoss;
     result.finalPerplexity = finalEval.perplexity;
 
-    // 4. Measure final weight norm & delta
+    // 4. Final weight norm & delta
     double finalSumSq = 0.0;
     double deltaSumSq = 0.0;
     const auto& params = model.getParameters();
@@ -748,13 +765,13 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
 
     // 5. Save Final Checkpoint (and ensure bestCheckpointPath exists if no step beat initialValLoss)
     result.checkpointPath = config.checkpointPath;
-    model.saveCheckpoint(config.checkpointPath, stepsExecuted, result.finalTrainLoss, &optimizer);
-    if (result.bestCheckpointStep == 0 && bestCkptPath != config.checkpointPath) {
-        model.saveCheckpoint(bestCkptPath, stepsExecuted, result.finalValLoss, &optimizer);
-        result.bestCheckpointStep = stepsExecuted;
+    model.saveCheckpoint(config.checkpointPath, finalGlobalStep, result.finalTrainLoss, &optimizer);
+    if (!bestSavedDuringRun && bestCkptPath != config.checkpointPath) {
+        model.saveCheckpoint(bestCkptPath, finalGlobalStep, result.finalValLoss, &optimizer);
+        result.bestCheckpointStep = static_cast<uint32_t>(finalGlobalStep);
     }
 
-    // 6. Sample Generation (from best checkpoint if separate)
+    // 6. Sample Generation
     NexaByteTokenizer defaultByteTok;
     Tokenizer& activeTokenizer = tokenizer ? *tokenizer : defaultByteTok;
 
@@ -762,7 +779,7 @@ PipelineTrainingResult NexaTrainer::trainWithDatasetAdvanced(
     genCfg.maxNewTokens = 32;
     genCfg.temperature = 0.5f;
     genCfg.seed = config.seed;
-    genCfg.stopSequences = {"\nUser:", "\nQ:", "\nQuestion:"};
+    genCfg.stopSequences = {"\nUser:", "\nAssistant:", "\nQ:", "\nQuestion:", "<|end_of_text|>"};
     auto genRes = model.generateText(config.promptForSample, activeTokenizer, genCfg);
     result.sampleGeneration = genRes.fullText;
 
@@ -1069,17 +1086,19 @@ std::vector<CapacityBenchmarkEntry> NexaTrainer::benchmarkConfigurations(uint32_
         uint32_t layers;
         uint32_t heads;
         uint32_t ctx;
+        bool useRope;
+        bool tieEmbeddings;
     };
     const std::vector<Spec> specs = {
-        {"Nano-64D-2L",    64,  128, 2, 2, 64},
-        {"Wide-128D-2L",   128, 256, 2, 4, 64},
-        {"Micro-128D-4L",  128, 256, 4, 4, 96},
-        {"Small-192D-4L",  192, 384, 4, 4, 96},
-        {"Compact-256D-6L",256, 512, 6, 4, 96}
+        {"Nano-64D-2L",              64,  128, 2, 2, 64,  false, false},
+        {"Tiny-96D-3L-RoPE-Tied",    96,  288, 3, 4, 192, true,  true},
+        {"Micro-128D-4L-RoPE-Tied", 128,  384, 4, 4, 192, true,  true},
+        {"Small-160D-4L-RoPE-Tied", 160,  480, 4, 4, 192, true,  true},
+        {"Medium-192D-4L-RoPE-Tied",192,  576, 4, 4, 192, true,  true}
     };
 
-    const uint32_t benchSeqLen = 32;
-    const uint32_t benchSteps = 5;
+    const uint32_t benchSeqLen = 64;
+    const uint32_t benchSteps = 4;
     std::vector<int32_t> inputs(benchSeqLen);
     std::vector<int32_t> targets(benchSeqLen);
     for (uint32_t i = 0; i < benchSeqLen; ++i) {
@@ -1097,6 +1116,8 @@ std::vector<CapacityBenchmarkEntry> NexaTrainer::benchmarkConfigurations(uint32_
         entry.config.nLayers = s.layers;
         entry.config.nHeads = s.heads;
         entry.config.maxSeqLen = s.ctx;
+        entry.config.useRope = s.useRope;
+        entry.config.tieEmbeddings = s.tieEmbeddings;
 
         entry.memoryEstimate = NexaNanoModel::estimateMemory(entry.config);
         entry.totalParameters = entry.memoryEstimate.totalParameters;
@@ -1125,7 +1146,7 @@ std::vector<CapacityBenchmarkEntry> NexaTrainer::benchmarkConfigurations(uint32_
         double totalSec = totalMs / 1000.0;
         entry.tokensPerSec = totalSec > 0.0 ? (static_cast<double>(benchSteps * benchSeqLen) / totalSec) : 0.0;
         entry.peakRssMb = getPeakRssMb();
-        // Require < 1024 MB estimated RAM and < 500 ms/step to run iterative CPU experiments in container
+        // Require < 1024 MB estimated RAM and < 500 ms/step for iterative CPU runs
         entry.feasibleFor4GbCpu = (entry.memoryEstimate.totalTrainingBytes < 1024ULL * 1024ULL * 1024ULL) && (entry.avgStepMs < 500.0);
         entries.push_back(entry);
     }
@@ -1133,65 +1154,76 @@ std::vector<CapacityBenchmarkEntry> NexaTrainer::benchmarkConfigurations(uint32_
 }
 
 bool NexaTrainer::verifyNumericalGradients(float* outMaxAbsDiff) {
-    NanoConfig cfg;
-    cfg.vocabSize = 16;
-    cfg.dim = 8;
-    cfg.intermediateDim = 16;
-    cfg.nLayers = 1;
-    cfg.nHeads = 2;
-    cfg.maxSeqLen = 8;
+    auto checkMode = [](bool useRope, bool tieEmbeddings) -> float {
+        NanoConfig cfg;
+        cfg.vocabSize = 16;
+        cfg.dim = 8;
+        cfg.intermediateDim = 16;
+        cfg.nLayers = 1;
+        cfg.nHeads = 2;
+        cfg.maxSeqLen = 8;
+        cfg.useRope = useRope;
+        cfg.tieEmbeddings = tieEmbeddings;
 
-    NexaNanoModel model(cfg, 123);
-    std::vector<int32_t> inputs = {1, 4, 7, 9};
-    std::vector<int32_t> targets = {4, 7, 9, 2};
+        NexaNanoModel model(cfg, 123);
+        std::vector<int32_t> inputs = {1, 4, 7, 9};
+        std::vector<int32_t> targets = {4, 7, 9, 2};
 
-    model.zeroGrad();
-    ModelActivations act;
-    model.forwardAndLoss(inputs, targets, act);
+        model.zeroGrad();
+        ModelActivations act;
+        model.forwardAndLoss(inputs, targets, act);
 
-    // Check representative scalars across every major parameter family
-    std::vector<std::pair<GradTensor*, int64_t>> checks = {
-        {&model.wEmbed, 4 * 8 + 3},
-        {&model.wPos, 1 * 8 + 2},
-        {&model.layers[0].attnNorm, 3},
-        {&model.layers[0].wQ, 2 * 8 + 5},
-        {&model.layers[0].wK, 1 * 8 + 4},
-        {&model.layers[0].wV, 5 * 8 + 1},
-        {&model.layers[0].wOut, 3 * 8 + 6},
-        {&model.layers[0].ffnNorm, 4},
-        {&model.layers[0].wGate, 2 * 16 + 7},
-        {&model.layers[0].wUp, 4 * 16 + 3},
-        {&model.layers[0].wDown, 6 * 8 + 2},
-        {&model.finalNorm, 5},
-        {&model.wHead, 3 * 16 + 7}
+        std::vector<std::pair<GradTensor*, int64_t>> checks = {
+            {&model.wEmbed, 4 * 8 + 3},
+            {&model.layers[0].attnNorm, 3},
+            {&model.layers[0].wQ, 2 * 8 + 5},
+            {&model.layers[0].wK, 1 * 8 + 4},
+            {&model.layers[0].wV, 5 * 8 + 1},
+            {&model.layers[0].wOut, 3 * 8 + 6},
+            {&model.layers[0].ffnNorm, 4},
+            {&model.layers[0].wGate, 2 * 16 + 7},
+            {&model.layers[0].wUp, 4 * 16 + 3},
+            {&model.layers[0].wDown, 6 * 8 + 2},
+            {&model.finalNorm, 5}
+        };
+        if (!useRope) {
+            checks.push_back({&model.wPos, 1 * 8 + 2});
+        }
+        if (!tieEmbeddings) {
+            checks.push_back({&model.wHead, 3 * 16 + 7});
+        }
+
+        const float eps = 1e-3f;
+        float maxDiff = 0.0f;
+
+        for (const auto& item : checks) {
+            GradTensor* gt = item.first;
+            int64_t idx = item.second;
+            float analyticGrad = gt->grad.dataFloat()[idx];
+            float orig = gt->value.dataFloat()[idx];
+
+            Tensor logitsPlus, logitsMinus, gDummy, pDummy;
+            gt->value.dataFloat()[idx] = orig + eps;
+            model.forward(inputs, logitsPlus);
+            gDummy = Tensor(logitsPlus.shape());
+            pDummy = Tensor(logitsPlus.shape());
+            float lossPlus = AutogradOps::crossEntropyForwardAndBackward(logitsPlus, targets, gDummy, pDummy);
+
+            gt->value.dataFloat()[idx] = orig - eps;
+            model.forward(inputs, logitsMinus);
+            float lossMinus = AutogradOps::crossEntropyForwardAndBackward(logitsMinus, targets, gDummy, pDummy);
+
+            gt->value.dataFloat()[idx] = orig;
+            float numericGrad = (lossPlus - lossMinus) / (2.0f * eps);
+            float diff = std::abs(analyticGrad - numericGrad);
+            if (diff > maxDiff) maxDiff = diff;
+        }
+        return maxDiff;
     };
 
-    const float eps = 1e-3f;
-    float maxDiff = 0.0f;
-
-    for (const auto& item : checks) {
-        GradTensor* gt = item.first;
-        int64_t idx = item.second;
-        float analyticGrad = gt->grad.dataFloat()[idx];
-        float orig = gt->value.dataFloat()[idx];
-
-        Tensor logitsPlus, logitsMinus, gDummy, pDummy;
-        gt->value.dataFloat()[idx] = orig + eps;
-        model.forward(inputs, logitsPlus);
-        gDummy = Tensor(logitsPlus.shape());
-        pDummy = Tensor(logitsPlus.shape());
-        float lossPlus = AutogradOps::crossEntropyForwardAndBackward(logitsPlus, targets, gDummy, pDummy);
-
-        gt->value.dataFloat()[idx] = orig - eps;
-        model.forward(inputs, logitsMinus);
-        float lossMinus = AutogradOps::crossEntropyForwardAndBackward(logitsMinus, targets, gDummy, pDummy);
-
-        gt->value.dataFloat()[idx] = orig;
-        float numericGrad = (lossPlus - lossMinus) / (2.0f * eps);
-        float diff = std::abs(analyticGrad - numericGrad);
-        if (diff > maxDiff) maxDiff = diff;
-    }
-
+    float diffLegacy = checkMode(false, false);
+    float diffRopeTied = checkMode(true, true);
+    float maxDiff = std::max(diffLegacy, diffRopeTied);
     if (outMaxAbsDiff) *outMaxAbsDiff = maxDiff;
     return maxDiff < 5e-3f;
 }
@@ -1335,6 +1367,7 @@ static std::unordered_set<std::string> buildEnglishEvaluationLexicon(
         "clear","short","order","system","memory","computer","program","code","number","numbers","energy","water","force",
         "particles","cell","cells","heat","light","earth","cpu","ram","ssd","algorithm","search","sort","matrix","vector"
     };
+    std::unordered_map<std::string, uint32_t> corpusFreq;
     namespace fs = std::filesystem;
     if (fs::exists(trainValDir) && fs::is_directory(trainValDir)) {
         for (const auto& entry : fs::directory_iterator(trainValDir)) {
@@ -1345,14 +1378,23 @@ static std::unordered_set<std::string> buildEnglishEvaluationLexicon(
             if (!ifs) continue;
             std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
             for (const auto& w : extractAlphaNumWordsLower(content)) {
-                lex.insert(w);
+                corpusFreq[w]++;
             }
         }
     }
+    for (const auto& [w, cnt] : corpusFreq) {
+        if (w.size() >= 2 && cnt >= 2) {
+            lex.insert(w);
+        }
+    }
     for (const auto& q : questions) {
-        for (const auto& w : extractAlphaNumWordsLower(q.question)) lex.insert(w);
+        for (const auto& w : extractAlphaNumWordsLower(q.question)) {
+            if (w.size() >= 2 || w == "a" || w == "i") lex.insert(w);
+        }
         for (const auto& kw : q.keywords) {
-            for (const auto& w : extractAlphaNumWordsLower(kw)) lex.insert(w);
+            for (const auto& w : extractAlphaNumWordsLower(kw)) {
+                if (w.size() >= 2 || w == "a" || w == "i") lex.insert(w);
+            }
         }
     }
     return lex;
@@ -1393,7 +1435,7 @@ UnseenEvalSummary NexaTrainer::evaluateUnseenQuestions(
     for (size_t idx = 0; idx < questions.size(); ++idx) {
         const auto& q = questions[idx];
         std::string prompt;
-        if (q.question.rfind("User:", 0) == 0) {
+        if (q.question.rfind("User:", 0) == 0 || q.question.rfind("System:", 0) == 0) {
             prompt = q.question + "\nAssistant:";
         } else {
             prompt = "User: " + q.question + "\nAssistant:";
@@ -1406,7 +1448,7 @@ UnseenEvalSummary NexaTrainer::evaluateUnseenQuestions(
         genCfg.topP = 0.9f;
         genCfg.repetitionPenalty = 1.18f;
         genCfg.seed = seed + idx;
-        genCfg.stopSequences = {"\nUser:", "\n\n", "<|end_of_text|>"};
+        genCfg.stopSequences = {"\nUser:", "\nAssistant:", "\nSystem:", "\n\n", "<|end_of_text|>"};
 
         auto gen = model.generateText(prompt, tokenizer, genCfg);
 
@@ -1433,23 +1475,35 @@ UnseenEvalSummary NexaTrainer::evaluateUnseenQuestions(
         size_t wordCount = ansWords.size();
         qr.wordRepetitionRate = computeWordRepetition(ansWords);
 
-        // Lexical English-word coherence ratio + punctuation/repetition check
+        // Lexical English-word coherence ratio + anti-fragment / punctuation / repetition check
         size_t validLexWords = 0;
+        size_t orphanSingleCharCount = 0;
+        size_t totalWordChars = 0;
         for (const auto& w : ansWords) {
+            totalWordChars += w.size();
             bool allDigits = !w.empty() && std::all_of(w.begin(), w.end(), [](unsigned char c) { return std::isdigit(c); });
+            if (w.size() == 1 && !allDigits && w != "a" && w != "i") {
+                orphanSingleCharCount++;
+            }
             if (allDigits || lexicon.count(w) > 0) {
                 validLexWords++;
             }
         }
         float lexRatio = wordCount > 0 ? static_cast<float>(validLexWords) / static_cast<float>(wordCount) : 0.0f;
+        float avgWordLen = wordCount > 0 ? static_cast<float>(totalWordChars) / static_cast<float>(wordCount) : 0.0f;
+        float orphanFrac = wordCount > 0 ? static_cast<float>(orphanSingleCharCount) / static_cast<float>(wordCount) : 1.0f;
         bool endsWithPunct = !ans.empty() && (ans.back() == '.' || ans.back() == '!' || ans.back() == '?');
         bool noDegenerateRepeat = (qr.trigramRepetitionRate < 0.30f && qr.wordRepetitionRate < 0.55f);
         float coh = 0.0f;
         if (validUtf8 && wordCount >= 3) {
             coh = 0.65f * lexRatio + (endsWithPunct ? 0.15f : 0.0f) + (noDegenerateRepeat ? 0.20f : 0.0f);
+            // Penalize 1-char / fragment salad
+            if (orphanFrac > 0.25f || avgWordLen < 2.2f) {
+                coh *= 0.35f;
+            }
         }
         qr.coherenceScore = std::min(1.0f, std::max(0.0f, coh));
-        qr.nonEmptyCoherentFormat = validUtf8 && !ans.empty() && wordCount >= 3 && qr.coherenceScore >= 0.60f;
+        qr.nonEmptyCoherentFormat = validUtf8 && !ans.empty() && wordCount >= 4 && avgWordLen >= 2.2f && qr.coherenceScore >= 0.60f;
 
         std::string ansLower = toLowerAscii(ans);
         qr.totalKeywords = static_cast<uint32_t>(q.keywords.size());
@@ -1471,16 +1525,15 @@ UnseenEvalSummary NexaTrainer::evaluateUnseenQuestions(
                  ansLower.find("no access") != std::string::npos ||
                  ansLower.find("not provided") != std::string::npos ||
                  ansLower.find("unknown") != std::string::npos);
-            qr.relevanceHit = expressesUncertainty;
-            qr.relevanceScore = expressesUncertainty ? 1.0f : 0.0f;
-            qr.factualAccuracyScore = expressesUncertainty ? 1.0f : 0.0f;
-            if (expressesUncertainty) summary.uncertaintyMatchedCount++;
+            qr.relevanceHit = expressesUncertainty && qr.coherenceScore >= 0.45f;
+            qr.relevanceScore = qr.relevanceHit ? 1.0f : 0.0f;
+            qr.factualAccuracyScore = qr.relevanceHit ? 1.0f : 0.0f;
+            if (qr.relevanceHit) summary.uncertaintyMatchedCount++;
         } else {
             qr.relevanceHit = (hits >= 1);
             qr.relevanceScore = qr.totalKeywords > 0
                 ? static_cast<float>(hits) / static_cast<float>(qr.totalKeywords)
                 : (wordCount >= 4 ? 0.5f : 0.0f);
-            // Factual accuracy requires >= 2 matching domain keywords OR >= 50% keyword coverage AND decent coherence
             if (qr.totalKeywords >= 2 && hits >= 2 && qr.coherenceScore >= 0.50f) {
                 qr.factualAccuracyScore = std::min(1.0f, static_cast<float>(hits) / static_cast<float>(std::min<uint32_t>(3, qr.totalKeywords)));
             } else if (hits == 1 && qr.coherenceScore >= 0.50f) {
@@ -1490,8 +1543,7 @@ UnseenEvalSummary NexaTrainer::evaluateUnseenQuestions(
             }
         }
 
-        // Instruction following: clean stop, stays in Assistant role, >= 4 words, obeys format
-        bool leakedRole = (ans.find("User:") != std::string::npos);
+        bool leakedRole = (ans.find("User:") != std::string::npos || ans.find("Assistant:") != std::string::npos);
         float instScore = 0.0f;
         if (!ans.empty() && validUtf8 && !leakedRole) {
             instScore += (qr.cleanStop ? 0.40f : 0.0f);
@@ -1838,7 +1890,7 @@ int NexaTrainer::runPhase36Tests() {
     // Test 5: Checkpoint Compatibility, ArchitecturePrepSpec & Memory Scaling Prep
     std::cout << "\n[TEST 5] .nexa v2 Checkpoint Compatibility & Architecture Preparation..." << std::endl;
     auto archSpec = NexaNanoModel::getArchitecturePrepSpec();
-    if (!archSpec.rmsNormActive || archSpec.ropeActiveInTraining || archSpec.tiedEmbeddingsActiveInTraining || archSpec.dropoutActiveInTraining) {
+    if (!archSpec.rmsNormActive || !archSpec.ropeActiveInTraining || !archSpec.tiedEmbeddingsActiveInTraining || archSpec.dropoutActiveInTraining) {
         std::cerr << "FAIL: ArchitecturePrepSpec active flags must reflect actual autograd status honestly!" << std::endl;
         return 1;
     }
@@ -1856,9 +1908,9 @@ int NexaTrainer::runPhase36Tests() {
         std::cerr << "FAIL: Memory estimation scaling options inconsistent!" << std::endl;
         return 1;
     }
-    std::cout << "Arch Prep: RMSNorm=active, RoPE=prepared(inactive), TiedEmbed=prepared(inactive), "
+    std::cout << "Arch Prep: RMSNorm=active, RoPE=active, TiedEmbed=active, "
               << "Base params=" << memBase.totalParameters
-              << ", Tied+RoPE-prepared(ctx512)=" << mem512.totalParameters
+              << ", Tied+RoPE(ctx512)=" << mem512.totalParameters
               << " (" << std::fixed << std::setprecision(2) << (mem512.totalTrainingBytes / (1024.0 * 1024.0)) << " MB train)." << std::endl;
 
     // Test 6: Experiment Manager Reproducibility & JSON Registry Persistence

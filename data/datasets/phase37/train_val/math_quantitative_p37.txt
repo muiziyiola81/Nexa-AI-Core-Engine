@@ -1,0 +1,89 @@
+User: Why is the number 1 neither prime nor composite?
+Assistant: A prime number requires exactly two distinct positive divisors, whereas 1 has only a single positive divisor, itself.
+
+User: How can you test quickly whether 29 is a prime number?
+Assistant: Since the square root of 29 is just under 5.4, testing divisibility by primes 2, 3, and 5 suffices; none divides 29 evenly, so 29 is prime.
+
+User: What are all the prime factors of 36?
+Assistant: Dividing repeatedly by small primes gives 36 = 2 * 2 * 3 * 3, so its prime factors are 2 and 3.
+
+User: Compute 15 percent of 200 step by step.
+Assistant: Ten percent of 200 is 20 and five percent is 10, so adding both parts gives 30.
+
+User: A jacket costs 80 dollars before a 25 percent discount. What is the sale price?
+Assistant: Twenty-five percent of 80 is one quarter, which equals 20 dollars, leaving a sale price of 60 dollars.
+
+User: Solve the linear equation 4x - 7 = 21 for x.
+Assistant: Add 7 to both sides to get 4x = 28, then divide both sides by 4 to find x = 7.
+
+User: Solve the equation 5x + 10 = 35.
+Assistant: Subtract 10 from both sides leaving 5x = 25, then divide by 5 to obtain x = 5.
+
+User: If a right triangle has perpendicular legs measuring 6 meters and 8 meters, what is its hypotenuse?
+Assistant: By the Pythagorean theorem, 6 squared plus 8 squared equals 36 plus 64 = 100, and the square root of 100 is 10 meters.
+
+User: A right triangle has legs of length 8 and 15. Find the hypotenuse.
+Assistant: Summing 8 squared (64) and 15 squared (225) gives 289, whose positive square root is 17.
+
+User: Compute the area of a triangle whose base is 14 cm and height is 6 cm.
+Assistant: Multiply half the base by height: 0.5 * 14 * 6 = 42 square centimeters.
+
+User: Find the circumference and area of a circle with radius 3 units in terms of pi.
+Assistant: Circumference equals 2 * pi * 3 = 6*pi units, and area equals pi * 3 squared = 9*pi square units.
+
+User: What is the area of a rectangle measuring 9 meters long by 4 meters wide?
+Assistant: Multiply length by width to obtain 9 * 4 = 36 square meters, while perimeter equals 2 * (9 + 4) = 26 meters.
+
+User: Find the arithmetic mean and median of the numbers 3, 7, 8, 12, and 50.
+Assistant: The sum is 80 divided by 5, giving a mean of 16, whereas the middle sorted value is a median of 8, which resists the extreme outlier 50.
+
+User: What is the arithmetic mean of 10, 15, and 20?
+Assistant: Adding 10 + 15 + 20 gives 45, and dividing by 3 numbers yields a mean of 15.
+
+User: Evaluate 3 raised to the fourth power.
+Assistant: Multiplying four factors of 3 gives 3 * 3 * 3 * 3 = 81.
+
+User: What does any nonzero number raised to the power zero equal?
+Assistant: By exponent rules, dividing a nonzero power by itself leaves a value equal to 1.
+
+User: Simplify the fraction 18/24 to lowest terms.
+Assistant: Dividing both numerator and denominator by their greatest common divisor 6 simplifies 18/24 to 3/4.
+
+User: How do you add two fractions with different denominators such as 1/3 and 1/4?
+Assistant: Convert both fractions to a common denominator of 12 (4/12 + 3/12) and add numerators to get 7/12.
+
+User: What is the probability of getting heads twice in a row when flipping a fair coin?
+Assistant: Each flip has probability 1/2 independently, so multiplying 1/2 * 1/2 gives 1/4 or 25 percent.
+
+User: If a fair die is rolled once, what is the probability of rolling a number greater than 4?
+Assistant: Two outcomes out of six (5 and 6) satisfy the condition, giving a probability of 2/6 = 1/3.
+
+User: Compute the dot product of vectors (2, -1, 4) and (3, 5, 2).
+Assistant: Multiply matching entries and sum: (2 * 3) + (-1 * 5) + (4 * 2) = 6 - 5 + 8 = 9.
+
+User: If matrix A has shape 3 by 4 and matrix B has shape 4 by 2, what shape does A times B have?
+Assistant: Because the inner dimensions both equal 4, multiplication is valid and produces a 3 by 2 matrix.
+
+User: Why are two lines with identical slopes and different y-intercepts parallel on the coordinate plane?
+Assistant: Equal slopes mean both lines rise at the exact same rate per horizontal step, so they maintain constant vertical separation and never intersect.
+
+User: What are the supplementary angles of a 65-degree angle?
+Assistant: Supplementary angles sum to 180 degrees, so 180 minus 65 leaves 115 degrees.
+
+User: If two interior angles of a triangle measure 50 degrees and 70 degrees, what is the third angle?
+Assistant: Subtracting 50 + 70 = 120 from 180 degrees shows the third angle measures 60 degrees.
+
+User: Convert 3/5 into a decimal and a percentage.
+Assistant: Dividing 3 by 5 equals 0.60, which corresponds to 60 percent.
+
+User: What does variance measure before taking its square root to form standard deviation?
+Assistant: Variance equals the average squared deviation from the mean, quantifying overall spread in squared units.
+
+User: Why does the derivative of a constant function equal zero everywhere?
+Assistant: A constant function never changes height across input values, so its slope and instantaneous rate of change are zero at every point.
+
+User: If f(x) = x squared, what is its derivative f'(x) and slope at x = 3?
+Assistant: By the power rule f'(x) = 2x, so at x = 3 the tangent slope equals 2 * 3 = 6.
+
+User: A train travels steadily at 90 kilometers per hour for 2.5 hours. How far does it move?
+Assistant: Multiplying speed by elapsed time gives 90 * 2.5 = 225 kilometers.

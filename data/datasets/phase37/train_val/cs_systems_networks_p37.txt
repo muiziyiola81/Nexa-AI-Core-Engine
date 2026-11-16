@@ -1,0 +1,89 @@
+User: How do CPU registers differ from L1 cache and main memory?
+Assistant: Registers sit directly inside processor execution cores for single-cycle access, L1 cache holds hot nearby bytes on chip, and main memory stores larger active datasets off chip with higher latency.
+
+User: What happens during a context switch between two running programs?
+Assistant: The operating system saves one process's CPU registers and program counter into memory, restores another process's state, and updates memory mappings.
+
+User: Why does virtual memory allow each application to see a clean private address space?
+Assistant: Hardware page tables translate each process's virtual addresses to physical RAM frames, isolating programs from corrupting one another's data.
+
+User: What triggers a page fault in an operating system?
+Assistant: A page fault occurs when a program accesses a virtual memory page that is not currently mapped into physical RAM, prompting the kernel to load or allocate it.
+
+User: How does spatial locality improve CPU cache hit rates?
+Assistant: Storing consecutive array elements contiguously in memory lets a single cache line fetch bring multiple upcoming values closer to the processor at once.
+
+User: Why are linked lists slower to traverse than contiguous arrays on modern CPUs?
+Assistant: Linked nodes sit scattered across heap addresses, defeating hardware prefetchers and causing frequent slow main-memory cache misses.
+
+User: What advantage does a doubly ended queue provide over a standard queue?
+Assistant: A deque supports constant-time insertions and removals at both its front head and back tail.
+
+User: How does a priority queue implemented with a binary heap stay efficient?
+Assistant: A binary heap keeps the minimum or maximum key at the root so peeking takes constant time and insertion or extraction takes logarithmic time.
+
+User: What problem does breadth-first search solve on unweighted graphs?
+Assistant: Breadth-first search explores vertices ring by ring by hop distance, guaranteeing the shortest edge count path from a starting vertex.
+
+User: When is depth-first search preferred over breadth-first search?
+Assistant: Depth-first search excels at detecting cycles, finding connected components, generating topological orders, and exploring backtracking trees with lower memory when graphs are wide.
+
+User: What does big-O notation describe about an algorithm?
+Assistant: Big-O notation characterizes how execution time or memory usage scales asymptotically as input size grows large, ignoring constant factors.
+
+User: Why can dynamic programming turn exponential recursive solutions into polynomial time?
+Assistant: Storing solutions to overlapping subproblems in a table prevents recomputing identical recursive branches repeatedly.
+
+User: How does TLS encryption protect web traffic between a browser and a server?
+Assistant: TLS authenticates the server via certificates, negotiates shared session keys securely, and encrypts payloads so network eavesdroppers cannot read or tamper with messages.
+
+User: What does an HTTP status code in the 4xx range signal?
+Assistant: A 4xx status code indicates a client-side error such as malformed JSON, missing authentication credentials, or requesting an unknown resource path.
+
+User: Why do stateless REST APIs remain easy to scale horizontally behind a load balancer?
+Assistant: Because each request carries all needed authentication and parameters without sticky server-side session state, any backend instance can handle any call.
+
+User: How does a relational database transaction maintain atomicity?
+Assistant: A transaction groups multiple reads and writes so either every modification commits permanently together or all partial edits roll back cleanly on failure.
+
+User: Why should applications use parameterized SQL queries instead of string concatenation?
+Assistant: Parameterized queries keep untrusted user values strictly separated from SQL grammar, eliminating SQL injection vulnerabilities.
+
+User: What is the role of an inverse index in full-text search engines?
+Assistant: An inverted index maps each word or token to the list of document IDs containing it, enabling fast multi-keyword lookups without scanning every file.
+
+User: How does weight decay regularize neural network parameters during AdamW optimization?
+Assistant: Weight decay shrinks large weights slightly toward zero at each step, discouraging extreme parameter magnitudes that memorize training noise.
+
+User: Why does learning rate warmup stabilize early transformer training?
+Assistant: Starting with a small learning rate lets randomly initialized attention and normalization layers adapt smoothly before taking larger gradient steps.
+
+User: What purpose does gradient clipping serve during neural network optimization?
+Assistant: Gradient clipping caps total gradient vector norm so occasional steep loss spikes cannot overwrite weights destructively.
+
+User: How does Rotary Positional Embedding encode token positions inside self-attention?
+Assistant: RoPE rotates query and key feature pairs by position-dependent angles so attention dot products naturally depend on relative distance between tokens.
+
+User: Why do many compact language models tie input embedding weights with the output head?
+Assistant: Sharing one matrix between token embeddings and output vocabulary projections cuts parameter count dramatically while sharing semantic geometry across input and output.
+
+User: What does cross-entropy loss measure in next-token prediction?
+Assistant: Cross-entropy loss quantifies the negative log probability the model assigns to the true next token, penalizing confident wrong predictions sharply.
+
+User: Why do instruction-tuned models mask prompt tokens during loss computation?
+Assistant: Setting prompt token targets to ignore-index prevents wasting capacity on memorizing user prompts and focuses gradients exclusively on assistant replies.
+
+User: How does top-p nucleus sampling select candidate tokens during generation?
+Assistant: Nucleus sampling sorts tokens by probability descending, keeps the smallest prefix summing past threshold p, and samples proportionally inside that set.
+
+User: Why does repetition penalty reduce looping phrases in small language models?
+Assistant: Penalizing logits of tokens that already appeared in recent context lowers the odds of repeating identical phrases endlessly.
+
+User: What is the purpose of a unit test suite in C++ systems software?
+Assistant: Unit tests verify core math invariants, edge cases, and serialization formats automatically after every code change before bugs reach production.
+
+User: Why do build systems like CMake separate source directories from build directories?
+Assistant: Out-of-source builds keep generated object files and binaries isolated from versioned source code, making clean rebuilds trivial.
+
+User: How does profiling CPU hotspots guide performance optimization?
+Assistant: Measuring where execution spends real clock cycles directs optimization effort toward inner loops instead of guessing blindly.

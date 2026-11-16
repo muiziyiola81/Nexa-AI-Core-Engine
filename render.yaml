@@ -1,0 +1,51 @@
+# ==============================================================================
+# NEXA AI Core Engine - Render Blueprint (Production Deployment Config)
+# Preserves nexa-p36-tier3 as the active default model and runs headless C++20
+# inference via the multi-stage Dockerfile without changing runtime behavior.
+# ==============================================================================
+
+services:
+  - type: web
+    name: nexa-core-engine
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /ready
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: HOST
+        value: 0.0.0.0
+      - key: STANDALONE_API
+        value: "true"
+      - key: ACTIVE_ADAPTER
+        value: nexa-native
+      - key: MODELS_DIR
+        value: /app/models
+      - key: DATA_DIR
+        value: /app/data
+      - key: AUTO_REGISTER_NEXA_CHECKPOINTS
+        value: "true"
+      - key: AUTO_LOAD_MODELS
+        value: nexa-p36-tier3
+      - key: AUTO_LOAD_ON_DEMAND
+        value: "true"
+      - key: REQUIRE_LOADED_MODEL_FOR_READY
+        value: "false"
+      - key: REQUIRE_API_KEY
+        value: "true"
+      - key: NEXA_API_KEY
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "120"
+      - key: MAX_CONCURRENT_REQUESTS
+        value: "4"
+      - key: MAX_TOKENS_PER_REQUEST
+        value: "4096"
+      - key: DEFAULT_CPU_THREADS
+        value: "2"

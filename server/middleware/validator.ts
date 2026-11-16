@@ -144,10 +144,10 @@ export function validateModelRegistration(req: Request, res: Response, next: Nex
     return;
   }
 
-  if (contextWindow !== undefined && (!Number.isInteger(contextWindow) || contextWindow < 512)) {
+  if (contextWindow !== undefined && (!Number.isInteger(contextWindow) || contextWindow < 64)) {
     res.status(400).json({
       error: {
-        message: 'Invalid "contextWindow". Must be an integer >= 512.',
+        message: 'Invalid "contextWindow". Must be an integer >= 64.',
         type: 'invalid_request_error',
         param: 'contextWindow',
         code: 'invalid_value'

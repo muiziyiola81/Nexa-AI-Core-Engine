@@ -27,6 +27,10 @@ struct NanoConfig {
     uint32_t maxSeqLen = 32;       // Maximum context window
     float normEps = 1e-5f;
     float initStddev = 0.02f;
+    float ropeTheta = 10000.0f;
+    bool useRope = false;          // Rotary Positional Embeddings (replaces wPos when true)
+    bool tieEmbeddings = false;    // Weight tying between wEmbed and LM head when true
+    uint64_t tokenizerHash = 0;    // Optional FNV-1a hash of linked .nbt tokenizer
 };
 
 struct LayerParams {
@@ -124,10 +128,10 @@ struct ModelMemoryEstimate {
 
 struct ArchitecturePrepSpec {
     bool rmsNormActive = true;              // Active in forward & backward autograd
-    bool ropePrepared = true;               // Planned future positional encoding
-    bool ropeActiveInTraining = false;      // Not yet connected to autograd graph
-    bool tiedEmbeddingsPrepared = true;     // Planned future weight-tying support
-    bool tiedEmbeddingsActiveInTraining = false;
+    bool ropePrepared = true;               // RoPE implemented in forward & backward autograd
+    bool ropeActiveInTraining = true;       // Active when config.useRope = true
+    bool tiedEmbeddingsPrepared = true;     // Tied embeddings implemented in forward & backward autograd
+    bool tiedEmbeddingsActiveInTraining = true; // Active when config.tieEmbeddings = true
     float plannedDropoutRate = 0.0f;        // Planned regularization rate
     bool dropoutActiveInTraining = false;
     uint32_t plannedLongContextLen = 512;   // Target context window capacity check
@@ -169,6 +173,18 @@ public:
         const std::vector<int32_t>& targetTokens,
         ModelActivations& act,
         int32_t ignoreIndex = -1
+    );
+
+    /**
+     * Token-weighted variant returning unnormalized NLL sum, unnormalized parameter
+     * gradients, and exact unmasked target token count for proper batch normalization.
+     */
+    double forwardAndLossSum(
+        const std::vector<int32_t>& inputTokens,
+        const std::vector<int32_t>& targetTokens,
+        ModelActivations& act,
+        int32_t ignoreIndex = -1,
+        uint64_t* outValidTokens = nullptr
     );
 
     /**

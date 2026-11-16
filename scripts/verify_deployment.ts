@@ -202,12 +202,15 @@ async function runDeploymentVerification() {
 
   // 7. Cloud AI Exclusion & Security Audit
   const serverFiles = [
+    'server/native/native_adapter.ts',
+    'server/native/cpp_bridge.ts',
     'server/engine/llama_cpp_adapter.ts',
     'server/engine/diagnostic_adapter.ts',
     'server/engine/engine_manager.ts',
     'server/api/routes.ts',
     'server/middleware/auth.ts',
     'server/middleware/rate_limiter.ts',
+    'server/standalone.ts',
     'server.ts'
   ];
   const forbidden = ['api.openai.com', 'api.anthropic.com', 'generativelanguage.googleapis.com', '@google/genai'];

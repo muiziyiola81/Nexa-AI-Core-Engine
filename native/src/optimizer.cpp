@@ -72,6 +72,8 @@ float AdamW::step(float currentLr) {
         float* m = st.m.dataFloat();
         float* v = st.v.dataFloat();
         const int64_t n = p->value.numel();
+        const bool applyWd = (p->value.rank() > 1) && (p->name.find("embed") == std::string::npos);
+        const float paramWd = applyWd ? wd : 0.0f;
 
         for (int64_t i = 0; i < n; ++i) {
             float gradVal = g[i];
@@ -85,7 +87,7 @@ float AdamW::step(float currentLr) {
             float vHat = v[i] / biasCorrection2;
 
             // Decoupled weight decay + Adam update
-            float stepVal = (mHat / (std::sqrt(vHat) + eps)) + (wd * w[i]);
+            float stepVal = (mHat / (std::sqrt(vHat) + eps)) + (paramWd * w[i]);
             w[i] -= lr * stepVal;
         }
     }

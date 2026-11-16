@@ -423,15 +423,33 @@ export function createApiRouter(
 
   router.post('/v1/tokenize', requireChatCompletions, rateLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { text, model } = req.body;
-      if (!text || !model) {
-        res.status(400).json({ error: { message: 'Missing "text" or "model" field.' } });
+      const { text, model } = req.body || {};
+      if (typeof text !== 'string' || text.length === 0) {
+        res.status(400).json({
+          error: {
+            message: 'Missing or invalid "text" parameter. Must be a non-empty string.',
+            type: 'invalid_request_error',
+            param: 'text',
+            code: 'param_required'
+          }
+        });
         return;
       }
-      const tokens = await engineManager.tokenize(text, model);
+      if (typeof model !== 'string' || model.trim().length === 0) {
+        res.status(400).json({
+          error: {
+            message: 'Missing or invalid "model" parameter. Must be a valid model ID string.',
+            type: 'invalid_request_error',
+            param: 'model',
+            code: 'param_required'
+          }
+        });
+        return;
+      }
+      const tokens = await engineManager.tokenize(text, model.trim());
       res.json({
         object: 'tokenize',
-        model,
+        model: model.trim(),
         token_count: tokens.length,
         tokens
       });

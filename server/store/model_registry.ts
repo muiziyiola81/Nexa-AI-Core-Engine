@@ -91,6 +91,16 @@ export class ModelRegistry {
       description: string;
     }> = [
       {
+        id: 'nexa-p37-v2',
+        name: 'NEXA-1 Phase 3.7 RoPE Tied BPE (Native C++20)',
+        weightPath: 'data/checkpoints/nexa_p37_v2_best.nexa',
+        tokenizerPath: 'data/tokenizers/nexa_bpe_p37_v2.nbt',
+        parameterSize: '1.05M',
+        contextWindow: 160,
+        description:
+          'Native C++20 RoPE + Tied-Embeddings BPE transformer checkpoint (4L, 4H, 128D, FFN 384, vocab 1536, ctx 160) for multi-turn NEXA CPU inference.'
+      },
+      {
         id: 'nexa-p36-tier3',
         name: 'NEXA-1 Phase 3.6 Conversational BPE (Native C++20)',
         weightPath: 'data/checkpoints/nexa_p36_tier3_conv_best.nexa',

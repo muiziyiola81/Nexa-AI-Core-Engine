@@ -64,6 +64,9 @@ std::string ExperimentManager::serializeRecordJson(const ExperimentRecord& rec) 
     o << "    \"nLayers\": " << rec.modelConfig.nLayers << ",\n";
     o << "    \"nHeads\": " << rec.modelConfig.nHeads << ",\n";
     o << "    \"maxSeqLen\": " << rec.modelConfig.maxSeqLen << ",\n";
+    o << "    \"useRope\": " << (rec.modelConfig.useRope ? "true" : "false") << ",\n";
+    o << "    \"tieEmbeddings\": " << (rec.modelConfig.tieEmbeddings ? "true" : "false") << ",\n";
+    o << "    \"ropeTheta\": " << rec.modelConfig.ropeTheta << ",\n";
     o << "    \"totalParameters\": " << rec.totalParameters << ",\n";
     o << "    \"architecturePrep\": {\n";
     o << "      \"rmsNormActive\": " << (rec.archPrep.rmsNormActive ? "true" : "false") << ",\n";

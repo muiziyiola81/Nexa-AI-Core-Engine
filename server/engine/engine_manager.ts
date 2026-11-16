@@ -137,8 +137,8 @@ export class EngineManager {
     if (process.env.AUTO_LOAD_MODELS !== undefined) {
       targets = config.autoLoadModels;
     } else if (this.activeAdapterId === 'nexa-native' && avail.available) {
-      // Auto-load the primary bundled .nexa checkpoint on cold start
-      const installedNative = ['nexa-p36-tier3', 'nexa-nano-step-40'].filter(id => {
+      // Auto-load the active production .nexa checkpoint on cold start (preserve nexa-p36-tier3 default)
+      const installedNative = ['nexa-p36-tier3', 'nexa-p37-v2', 'nexa-nano-step-40'].filter(id => {
         const m = this.registry.get(id);
         return Boolean(m && m.isInstalled);
       });
@@ -439,7 +439,7 @@ export class EngineManager {
 
   public async tokenize(text: string, modelId: string): Promise<number[]> {
     const model = this.registry.get(modelId);
-    if (!model) throw new Error(`Model "${modelId}" not found in registry.`);
+    if (!model) throw new Error(`[NEXA_ERR_MODEL_NOT_FOUND] Model "${modelId}" does not exist in registry.`);
     const adapter = this.getActiveAdapter();
     return adapter.tokenize(text, model);
   }

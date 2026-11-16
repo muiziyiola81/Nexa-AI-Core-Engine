@@ -134,6 +134,15 @@ public:
         int32_t ignoreIndex = -1
     );
 
+    static double crossEntropyForwardAndBackwardSum(
+        const Tensor& logits,              // [N, V]
+        const std::vector<int32_t>& targets,// [N]
+        Tensor& gradLogits,                // [N, V] (unnormalized gradients)
+        Tensor& probsOut,                  // [N, V]
+        int32_t ignoreIndex = -1,
+        uint64_t* outValidTokens = nullptr
+    );
+
     /**
      * Global gradient norm computation, scaling, and clipping:
      */

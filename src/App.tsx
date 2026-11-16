@@ -32,9 +32,25 @@ export default function App() {
     localStorage.setItem('nexa_client_api_key', k);
   };
 
+  const getAuthHeaders = useCallback(
+    (includeJsonContentType = false): Record<string, string> => {
+      const headers: Record<string, string> = {};
+      if (includeJsonContentType) {
+        headers['Content-Type'] = 'application/json';
+      }
+      if (activeApiKey) {
+        headers['Authorization'] = `Bearer ${activeApiKey}`;
+      }
+      return headers;
+    },
+    [activeApiKey]
+  );
+
   const fetchGlobalData = useCallback(async () => {
     setIsRefreshing(true);
     try {
+      const authHeaders = getAuthHeaders();
+
       // 1. Health
       const healthRes = await fetch('/health').catch(() => null);
       if (healthRes && healthRes.ok) {
@@ -46,21 +62,21 @@ export default function App() {
       }
 
       // 2. Engine status
-      const statusRes = await fetch('/v1/engine/status').catch(() => null);
+      const statusRes = await fetch('/v1/engine/status', { headers: authHeaders }).catch(() => null);
       if (statusRes && statusRes.ok) {
         const sData = await statusRes.json();
         setEngineStatus(sData);
       }
 
       // 3. Models
-      const modelsRes = await fetch('/v1/models').catch(() => null);
+      const modelsRes = await fetch('/v1/models', { headers: authHeaders }).catch(() => null);
       if (modelsRes && modelsRes.ok) {
         const mData = await modelsRes.json();
         setModels(mData.data || []);
       }
 
       // 4. Keys
-      const keysRes = await fetch('/v1/keys').catch(() => null);
+      const keysRes = await fetch('/v1/keys', { headers: authHeaders }).catch(() => null);
       if (keysRes && keysRes.ok) {
         const kData = await keysRes.json();
         setKeys(kData.data || []);
@@ -71,7 +87,7 @@ export default function App() {
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [getAuthHeaders]);
 
   useEffect(() => {
     fetchGlobalData();
@@ -83,7 +99,7 @@ export default function App() {
   const handleSwitchAdapter = async (adapterId: string) => {
     const res = await fetch('/v1/engine/config', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(true),
       body: JSON.stringify({ activeAdapterId: adapterId })
     });
     if (!res.ok) {
@@ -96,7 +112,7 @@ export default function App() {
   const handleLoadModel = async (modelId: string, options: any) => {
     const res = await fetch(`/v1/models/${modelId}/load`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(true),
       body: JSON.stringify(options)
     });
     const data = await res.json().catch(() => ({}));
@@ -108,7 +124,8 @@ export default function App() {
 
   const handleUnloadModel = async (modelId: string) => {
     const res = await fetch(`/v1/models/${modelId}/unload`, {
-      method: 'POST'
+      method: 'POST',
+      headers: getAuthHeaders()
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -120,7 +137,7 @@ export default function App() {
   const handleRegisterModel = async (modelData: any) => {
     const res = await fetch('/v1/models/register', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(true),
       body: JSON.stringify(modelData)
     });
     const data = await res.json().catch(() => ({}));
@@ -133,7 +150,8 @@ export default function App() {
   const handleUnregisterModel = async (modelId: string) => {
     if (!confirm(`Are you sure you want to unregister model "${modelId}"?`)) return;
     const res = await fetch(`/v1/models/${modelId}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: getAuthHeaders()
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -145,7 +163,7 @@ export default function App() {
   const handleToggleRequireAuth = async (require: boolean) => {
     const res = await fetch('/v1/engine/config', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(true),
       body: JSON.stringify({ requireApiKey: require })
     });
     if (!res.ok) throw new Error('Failed to update authentication requirement.');
@@ -155,7 +173,7 @@ export default function App() {
   const handleCreateKey = async (name: string, scopes: string[], rateLimitPerMin?: number) => {
     const res = await fetch('/v1/keys', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(true),
       body: JSON.stringify({ name, scopes, rateLimitPerMin })
     });
     const data = await res.json();
@@ -166,7 +184,10 @@ export default function App() {
 
   const handleRevokeKey = async (keyId: string) => {
     if (!confirm('Are you sure you want to revoke this API key?')) return;
-    const res = await fetch(`/v1/keys/${keyId}`, { method: 'DELETE' });
+    const res = await fetch(`/v1/keys/${keyId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
     if (!res.ok) throw new Error('Failed to revoke API key.');
     await fetchGlobalData();
   };
@@ -225,7 +246,7 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'tests' && <TestsTab />}
+        {activeTab === 'tests' && <TestsTab apiKey={activeApiKey} />}
 
         {activeTab === 'docs' && <DocsTab />}
       </main>
